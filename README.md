@@ -1,21 +1,22 @@
 in the name of ALLAH
 
-### Simple Abstraction for Remote Function
+SARF: Simple Abstraction for Remote Function
+----
 
-##### Mostly Protocol Agnostic
+An easy to use, protocol agnostic, non-blocking, and back-presured RPC-toolkit based on Akka-Streams and Akka-Actors.
 
-##### Clean API for Client and Server
+Depencencies
+----
 
-##### Session Protocol
+ - [bisphone-testkit](https://github.com/reza-samei/bisphone-testkit)
+ - [bisphone-std](https://github.com/reza-samei/bisphone-std)
+ - [bisphone-akkastreams](https://github.com/reza-samei/bisphone-akkastreams)
 
-##### Back-Pressure Control
+Contribution
+-----
 
-##### Examples
+Comments, contributions and patches are greatly appreciated.
 
-##### To Use
-
-You need testkit(https://github.com/reza-samei/bisphone-testkit),
- std(https://github.com/reza-samei/bisphone-std), and some custome stages from
- akkastreams(https://github.com/reza-samei/bisphone-akkastreams)
- 
-Publish it localy to use it.
+License
+-----
+The MIT License (MIT).
