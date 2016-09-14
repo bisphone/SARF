@@ -141,13 +141,14 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
   }
 
   protected def unsupported (frame: Fr) = {
-    Future failed new UnsupporetdDispatchKey[Fr](
+    failureHandler(new UnsupporetdDispatchKey[Fr](
       frame,
       s"Unsupported Dispatch Key: ${frame.dispatchKey} (by TrackingKey: ${frame.trackingKey})"
-    )
+    ), frame.bytes)
   }
 
   def handle (bytes: ByteString): Future[IOCommand] = try {
+
 
     val frame = frameReader.readFrame(bytes)
     get(frame.dispatchKey) match {
@@ -165,7 +166,7 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
   } catch {
     case NonFatal(cause) =>
       // @todo: Collect Stats
-      Future failed cause
+      failureHandler(cause, bytes)
   }
 
   def apply (bytes: ByteString): Future[IOCommand] = handle(bytes)
