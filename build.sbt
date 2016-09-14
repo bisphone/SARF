@@ -4,7 +4,7 @@ organization := "com.bisphone"
 
 name := "sarf" // Simple Abstraction for Remote Function
 
-version := "0.5.2-SNAPSHOT"
+version := "0.5.3-SNAPSHOT"
 
 scalaVersion := "2.11.8"
 
@@ -28,5 +28,3 @@ libraryDependencies ++= Seq(
   akka("akka-testkit") % Test,
   akka("akka-stream-testkit") % Test
 )
-
-    

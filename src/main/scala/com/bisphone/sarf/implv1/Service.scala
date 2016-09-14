@@ -32,7 +32,7 @@ object Service {
     type er = Er
     val pure: rq => AsyncResult[er, rs] = fn
 
-    def run(frame: Fr)(
+    def run (frame: Fr)(
       implicit
       ec: ExecutionContextExecutor
     ): Future[UFr] = {
@@ -46,9 +46,9 @@ object Service {
     }
   }
 
-  class Builder[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]](
+  class Builder[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
     executor: ExecutionContextExecutor,
-    failureHandler:  FailureHandler,
+    failureHandler: FailureHandler,
     frameReader: FrameReader[Fr],
     frameWriter: FrameWriter[Fr, UFr],
     statCollector: Option[sarf.StatCollector]
@@ -58,9 +58,9 @@ object Service {
     uf$tag: ClassTag[UFr]
   ) {
 
-    private val fnlist = scala.collection.mutable.ListBuffer.empty[Service.Fn[_,_,_,Fr,UFr]]
+    private val fnlist = scala.collection.mutable.ListBuffer.empty[Service.Fn[_, _, _, Fr, UFr]]
 
-    def serve[Rq, Rs, Er](fn: Rq => AsyncResult[Er, Rs])(
+    def serve[Rq, Rs, Er] (fn: Rq => AsyncResult[Er, Rs])(
       implicit
       rqKey: TypeKey[Rq],
       rsKey: TypeKey[Rs],
@@ -75,7 +75,7 @@ object Service {
     }
 
     def result: StdTry[Service[Fr, UFr]] = Try {
-      val fns = fnlist.map(i => i.rqKey.typeKey -> i).toMap[Int, Fn[_,_,_,Fr, UFr]]
+      val fns = fnlist.map(i => i.rqKey.typeKey -> i).toMap[Int, Fn[_, _, _, Fr, UFr]]
 
       if (fns.size != fnlist.size)
         throw new RuntimeException("Invalid Functions: Some functions has the same input-signature")
@@ -96,10 +96,10 @@ object Service {
 
 class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
   executor: ExecutionContextExecutor,
-  failureHandler:  FailureHandler,
+  failureHandler: FailureHandler,
   frameReader: FrameReader[Fr],
   frameWriter: FrameWriter[Fr, UFr],
-  handlers: Map[Int, Service.Fn[_,_,_,_,_]],
+  handlers: Map[Int, Service.Fn[_, _, _, _, _]],
   statCollector: Option[sarf.StatCollector]
 )(
   implicit
@@ -108,58 +108,66 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
 ) extends (ByteString => Future[IOCommand]) {
 
 
-  protected def get(key: TypeKey[_]): Option[Service.Fn[_,_,_,Fr,UFr]] =
-    handlers.get(key.typeKey).asInstanceOf[Option[Service.Fn[_,_,_,Fr, UFr]]]
+  protected def get (key: TypeKey[_]): Option[Service.Fn[_, _, _, Fr, UFr]] =
+    handlers.get(key.typeKey).asInstanceOf[Option[Service.Fn[_, _, _, Fr, UFr]]]
 
-  protected def run(fn: Service.Fn[_,_,_,Fr, UFr], frame: Fr): Future[IOCommand] = {
+  protected def run (
+    fn: Service.Fn[_, _, _, Fr, UFr], frame: Fr
+  ): Future[IOCommand] = {
     fn.run(frame)(executor).map { ufr =>
       IOCommand.Send(frameWriter.writeFrame(ufr, frame.trackingKey).bytes)
+    }(executor).recoverWith {
+      case NonFatal(cause) => failureHandler(cause, frame.bytes)
     }(executor)
   }
 
-  protected def unsupported(frame: Fr) = {
+  protected def runWithStat (
+    fn: Service.Fn[_, _, _, Fr, UFr], frame: Fr,
+    zero: Long, stat: sarf.StatCollector
+  ): Future[IOCommand] = {
+
+    val promise = Promise[IOCommand]
+
+    run(fn, frame).onComplete {
+      case StdSuccess(iocmd) =>
+        if (statCollector.isDefined) statCollector.get.done(fn.statTag, System.currentTimeMillis() - zero)
+        promise success iocmd
+      case StdFailure(cause) =>
+        if (statCollector.isDefined) statCollector.get.failed(fn.statTag, System.currentTimeMillis() - zero)
+        promise completeWith failureHandler(cause, frame.bytes)
+    }(executor)
+
+    promise.future
+  }
+
+  protected def unsupported (frame: Fr) = {
     Future failed new UnsupporetdDispatchKey[Fr](
       frame,
       s"Unsupported Dispatch Key: ${frame.dispatchKey} (by TrackingKey: ${frame.trackingKey})"
     )
   }
 
-  def handle(bytes: ByteString): Future[IOCommand] = {
+  def handle (bytes: ByteString): Future[IOCommand] = try {
 
-    var zero = 0l
-    var statTag: Option[StatTag[_]] = None
-    val promise = Promise[IOCommand]
+    val frame = frameReader.readFrame(bytes)
+    get(frame.dispatchKey) match {
+      case Some(fn) =>
 
-    val rsl = try {
-      val frame = frameReader.readFrame(bytes)
-      get(frame.dispatchKey) match {
-        case Some(fn) =>
+        if (statCollector.isDefined) {
+          runWithStat(fn, frame, System.currentTimeMillis(), statCollector.get)
+        } else run(fn, frame)
 
-          if (statCollector.isDefined) {
-            statTag = Some(fn.statTag)
-            zero = System.currentTimeMillis()
-          }
-
-          run(fn, frame)
-
-        case None => unsupported(frame)
-      }
-    } catch {
-      case NonFatal(cause) => Future failed cause
+      case None =>
+        // @todo: Collect Stats
+        unsupported(frame)
     }
 
-    rsl.onComplete {
-      case StdSuccess(iocmd) =>
-        if (statCollector.isDefined) statCollector.get.done(statTag.get, System.currentTimeMillis() - zero)
-        promise success iocmd
-      case StdFailure(cause) =>
-        if (statCollector.isDefined) statCollector.get.failed(statTag.get, System.currentTimeMillis() - zero)
-        promise completeWith failureHandler(cause,bytes)
-    }(executor)
-
-    promise.future
+  } catch {
+    case NonFatal(cause) =>
+      // @todo: Collect Stats
+      Future failed cause
   }
 
-  def apply(bytes: ByteString): Future[IOCommand] = handle(bytes)
+  def apply (bytes: ByteString): Future[IOCommand] = handle(bytes)
 
 }
