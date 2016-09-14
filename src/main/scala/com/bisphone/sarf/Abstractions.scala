@@ -148,6 +148,20 @@ trait TCPClientRef[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
     erReader: Reader[Er, Fr]
   ): AsyncResult[Er, Rs]
 
+  def call[Rq, Rs, Er](
+    rq: Rq,
+    rqTC: TypeComplementary[Rq, Fr, UFr],
+    rsTC: TypeComplementary[Rs, Fr, UFr],
+    erTC: TypeComplementary[Er, Fr, UFr]
+  ): AsyncResult[Er, Rs] = call(rq)(
+    rqTC.dispatchKey,
+    rsTC.dispatchKey,
+    erTC.dispatchKey,
+    rqTC.writer,
+    rsTC.reader,
+    erTC.reader
+  )
+
 }
 
 // ========================================================================
