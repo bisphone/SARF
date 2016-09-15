@@ -7,6 +7,7 @@ import com.bisphone.std._
 
 import scala.concurrent.{ExecutionContextExecutor, Future, Promise}
 import akka.util.ByteString
+import org.slf4j.LoggerFactory
 
 import scala.reflect.ClassTag
 import scala.util.control.NonFatal
@@ -75,6 +76,10 @@ object Service {
     }
 
     def result: StdTry[Service[Fr, UFr]] = Try {
+
+      if (fnlist.size < 1)
+        throw new RuntimeException("The function list is empty!")
+
       val fns = fnlist.map(i => i.rqKey.typeKey -> i).toMap[Int, Fn[_, _, _, Fr, UFr]]
 
       if (fns.size != fnlist.size)
@@ -105,7 +110,7 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
   implicit
   fr$tag: ClassTag[Fr],
   uf$tag: ClassTag[UFr]
-) extends (ByteString => Future[IOCommand]) {
+) extends sarf.Service[Fr, UFr] {
 
 
   protected def get (key: TypeKey[_]): Option[Service.Fn[_, _, _, Fr, UFr]] =
@@ -116,8 +121,6 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
   ): Future[IOCommand] = {
     fn.run(frame)(executor).map { ufr =>
       IOCommand.Send(frameWriter.writeFrame(ufr, frame.trackingKey).bytes)
-    }(executor).recoverWith {
-      case NonFatal(cause) => failureHandler(cause, frame.bytes)
     }(executor)
   }
 
@@ -156,10 +159,13 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
 
         if (statCollector.isDefined) {
           runWithStat(fn, frame, System.currentTimeMillis(), statCollector.get)
-        } else run(fn, frame)
+        } else run(fn, frame).recoverWith {
+          case NonFatal(cause) => failureHandler(cause, frame.bytes)
+        }(executor)
 
       case None =>
         // @todo: Collect Stats
+        LoggerFactory.getLogger("OPS").warn(handlers.keys.mkString(","))
         unsupported(frame)
     }
 

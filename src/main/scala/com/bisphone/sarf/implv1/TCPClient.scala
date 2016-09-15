@@ -109,10 +109,9 @@ class TCPClientRefImpl[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]](
   ): AsyncResult[Er, Rs] = {
 
     val rsl = this.send(rqWriter.write(rq)).map { frame =>
-      frame.dispatchKey match {
-        case `rsKey` => StdRight(rsReader.read(frame))
-        case `erKey` => StdLeft(erReader.read(frame))
-      }
+      if (frame.dispatchKey.typeKey == rsKey.typeKey) StdRight(rsReader.read(frame))
+      else if (frame.dispatchKey.typeKey == erKey.typeKey) StdLeft(erReader.read(frame))
+      else throw new RuntimeException(s"Invalid Response (Dispatch Key: ${frame.dispatchKey})")
     }
 
     AsyncResult.fromFuture(rsl)

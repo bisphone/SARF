@@ -36,13 +36,15 @@ object IOCommand {
 
 // ========================================================================
 
-trait TypeKey[T] {
+trait TypeKey[T] extends Serializable {
 
   def typeKey: Int
 
   def unapply(other: Int): Boolean = other == typeKey
 
   def unapply[O <: T](other: TypeKey[O]): Boolean = unapply(other.typeKey)
+
+  override def toString(): String = s"TypeKey(${getClass.getName}: ${typeKey})"
 }
 
 object TypeKey {
@@ -167,7 +169,11 @@ trait TCPClientRef[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
 // ========================================================================
 // Server Stats
 
-trait StatTag[T] { def tag: String }
+trait StatTag[T] extends Serializable {
+  def tag: String
+
+  override def toString(): String = s"StatTag(${getClass.getName}: ${tag})"
+}
 
 object StatTag {
   private class FreeStatTag(override val tag: String) extends StatTag[Nothing]
