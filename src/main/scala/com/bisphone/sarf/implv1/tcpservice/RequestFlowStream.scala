@@ -56,7 +56,7 @@ private[implv1] object RequestFlowStream {
 
       logger debug s"""{
                  |'subject': '${subject}',
-                 |'bytes': ${str}
+                 |'bytes': [${str}]
                  |}""".stripMargin
 
       bytes
@@ -80,7 +80,7 @@ private[implv1] object RequestFlowStream {
 
       slicerStage
         .map(_.drop(Constant.lenOfLenField)) // Remove len-filed from stream
-        .mapAsync(concurrencyPerConnection)(fn) ~> mergeStage
+        .mapAsync(concurrencyPerConnection)(fn)~> mergeStage
 
       // IOCommandTransformer will add len-field when it's needed
       val merged = mergeStage.out.via(new IOCommandTransformer(name, conf.byteOrder, debug, logger))

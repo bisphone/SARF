@@ -4,7 +4,7 @@ organization := "com.bisphone"
 
 name := "sarf" // Simple Abstraction for Remote Function
 
-version := "0.5.7-SNAPSHOT"
+version := "0.6.0-SNAPSHOT"
 
 scalaVersion := "2.11.8"
 
@@ -18,7 +18,7 @@ def akka (
 fork := true
 
 libraryDependencies ++= Seq(
-  "com.bisphone" %% "akkastream" % "0.3.2-SNAPSHOT",
+  "com.bisphone" %% "akkastream" % "0.4.0-SNAPSHOT",
   "com.bisphone" %% "std" % "0.7.5-SNAPSHOT",
   "ch.qos.logback" % "logback-classic" % "1.1.7"
 )

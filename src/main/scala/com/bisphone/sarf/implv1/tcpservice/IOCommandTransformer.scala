@@ -32,7 +32,7 @@ private[implv1] class IOCommandTransformer(
   private def addSize(bytes: ByteString): ByteString = {
     // Constant.lenOfLenField is 4 byte :)
     // Add len-field in the header !
-    ByteString.newBuilder.putInt(bytes.size).append(bytes).result()
+    ByteString.newBuilder.putInt(Constant.lenOfLenField + bytes.size).append(bytes).result()
   }
 
   private def prodStage = new GraphStageLogic(shape) with InHandler with OutHandler {

@@ -149,7 +149,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
     case Command.GetState => sender ! state
 
     case _: Command.Send[_] =>
-      logger warn """{'subject': 'Director(connecting).Send => CantSend'}"""
+      logger warn """{'subject': 'Director(connecting).Send => Can\'tSend'}"""
       sender ! Director.Event.CantSend
 
     case ev: Event.Connected =>

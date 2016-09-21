@@ -54,7 +54,7 @@ def apply(
   def debugFn(subject: String): ByteString => ByteString = bytes => {
     logger debug s"""{
               |'subject': '${subject}',
-              |'bytes': '${str(bytes)}'
+              |'bytes': [${str(bytes)}]
               |}""".stripMargin
     bytes
   }
@@ -63,7 +63,7 @@ def apply(
       val tmp = Source.actorPublisher[ByteString](publisher).map{ bytes =>
         // Constant.lenOfLenField is 4
         // Add len-field to the header
-        ByteString.newBuilder.putInt(bytes.size)(byteOrder.javaValue).append(bytes).result()
+        ByteString.newBuilder.putInt(Constant.lenOfLenField + bytes.size)(byteOrder.javaValue).append(bytes).result()
       }
       if (sureDebug) tmp.map(debugFn("BytesOutputStream")) else tmp
     }
