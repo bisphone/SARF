@@ -164,8 +164,6 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
         }(executor)
 
       case None =>
-        // @todo: Collect Stats
-        LoggerFactory.getLogger("OPS").warn(handlers.keys.mkString(","))
         unsupported(frame)
     }
 

@@ -35,6 +35,9 @@ private[implv1] object Director {
     new Director(name, tcp, stream, writer, reader, debug)
   }
 
+  // Controlling & Debug & Health Issue
+  private[implv1] case class Echo[T](value: T)
+
   private[implv1] trait Command
 
   private[implv1] object Command {
@@ -72,6 +75,8 @@ private[implv1] object Director {
       publisher: ActorRef,
       consumer: ActorRef
     ) extends Event
+
+    case class Failed(cause: Option[Throwable] = None)
 
     case object StreamHasClosed extends Event
 
@@ -148,8 +153,15 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
     case Command.GetState => sender ! state
 
-    case _: Command.Send[_] =>
-      logger warn """{'subject': 'Director(connecting).Send => Can\'tSend'}"""
+
+    // case frm: Command.Send[_] =>
+    // logger warn """{'subject': 'Director(connecting).Send => Can\'tSend'}"""
+    case Command.Send(rq: UFr) if uf$tag.unapply(rq).isDefined /* check type erasaure */ =>
+      logger warn
+        s"""{
+           |'subject': 'Director(connecting).Send => Can\'tSend',
+           |'untracked-dispatchkey': ${rq.dispatchKey}
+           |}""".stripMargin
       sender ! Director.Event.CantSend
 
     case ev: Event.Connected =>
@@ -173,6 +185,17 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
             |'tcpConfig': '$tcp'
             |}""".stripMargin
       context stop self
+
+    case Event.Failed(cause) =>
+      logger error(
+        s"""{
+          |'subject': 'Director(connecting).Failed => Stop',
+          |'tcpConfig': '$tcp'
+          |}""".stripMargin, cause.orNull
+        )
+      context stop self
+
+    case Echo(value) => sender ! value
   }
 
   def connected (ev: Event.Connected): Receive = {
@@ -188,17 +211,36 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       if (logger.isDebugEnabled()) logger debug
         s"""{
-            |'subject': 'Director(connected).Send'
+            |'subject': 'Director(connected).Send',
+            |'dispatchKey': ${frame.dispatchKey},
             |'trackingCode': $tk,
             |'bytes': '${frame.bytes.size}'
             |}""".stripMargin
 
     case Event.Received(bytes:  ByteString) =>
 
+
+
       val frame = reader.readFrame(bytes)
       tracker.resolve(frame.trackingKey) match {
-        case Some(requestor) => requestor ! Event.Received[Fr](frame)
-        case None => throw new Director.UnrequestedResponse[Fr](frame, s"Unrequested Response trackingKey: ${frame.trackingKey}")
+        case Some(requestor) =>
+          if (logger.isDebugEnabled()) logger debug
+            s"""{
+                |'subject': 'Director(connected).Received',
+                |'responseKey': ${frame.dispatchKey},
+                |'trackingCode': ${frame.trackingKey},
+                |'bytes': ${frame.bytes.size}
+                |}""".stripMargin
+          requestor ! Event.Received[Fr](frame)
+        case None =>
+          if (logger.isErrorEnabled()) logger error
+            s"""{
+               |'subject': 'Director(connected).Received/Unrequested Response!',
+               |'responseKey': ${frame.dispatchKey},
+               |'trackingCode': ${frame.trackingKey},
+               |'bytes': ${frame.bytes.size}
+               |}""".stripMargin
+          throw new Director.UnrequestedResponse[Fr](frame, s"Unrequested Response trackingKey: ${frame.trackingKey}")
       }
 
     case Command.Disconnect =>
@@ -215,11 +257,13 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       logger warn
         s"""{
-            |'subject': 'Director(connected).Terminated => Director.IOException',
+            |'subject': 'Director(connected).TerminatedWorker => Director.IOException',
             |'actor': '$ref'
             |}""".stripMargin
 
       throw new Director.IOException(s"the $ref has been terminated!")
+
+    case Echo(value) => sender ! value
   }
 
   def disconnecting: Receive = {
@@ -276,10 +320,20 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
       .joinMat(flow) {
         case (outgoing, (consumer, publisher)) => outgoing.map(Event.Connected(_, publisher, consumer))
       }.run.recover {
-      case cause => ??? // @todo
+      case cause => Event.Failed(Some(cause))
     }.foreach { st => self ! st }
 
     context.system.scheduler.scheduleOnce(tcp.connectingTimeout, self, Event.Expired("Connecting"))
+  }
+
+  override def postStop(): Unit = {
+    logger warn
+      s"""{
+         | 'subject': 'Director(?).PostStop',
+         | 'ref': '${self}',
+         | 'state': '${state}',
+         | 'tracker': ${tracker},
+         |}""".stripMargin
   }
 
 }
