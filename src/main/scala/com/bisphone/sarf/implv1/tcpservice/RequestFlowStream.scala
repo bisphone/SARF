@@ -68,7 +68,7 @@ private[implv1] object RequestFlowStream {
 
       import GraphDSL.Implicits._
 
-      val mergeStage = builder add Merge[IOCommand](2)
+      val mergeStage = builder add Merge[IOCommand](2, eagerComplete = true)
 
       source ~> mergeStage
 

@@ -27,7 +27,17 @@ private[implv1] class ConnectionAgent(logger: Logger) extends ActorPublisher[IOC
   def receive: Receive = {
     case cmd:IOCommand => tryPush(cmd)
     case Request(_) => tryDeliver()
-    case Cancel => context stop self
+    case Cancel =>
+      if (logger.isDebugEnabled()) logger.debug(s"Actor($self) received 'Cancel' signal!")
+      context stop self
+  }
+
+  override def preStart(): Unit = {
+    if (logger.isDebugEnabled()) logger.debug(s"Actor($self) preStart")
+  }
+
+  override def postStop(): Unit = {
+    if (logger.isDebugEnabled()) logger.debug(s"Actor($self) postStop")
   }
 
 }
