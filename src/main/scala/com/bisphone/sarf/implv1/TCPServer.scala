@@ -16,73 +16,73 @@ import scala.concurrent.duration._
   */
 object TCPServer {
 
-  def apply(
-    name: String,
-    tcpConfig: TCPConfigForServer,
-    streamConfig: StreamConfig,
-    debug: Boolean
-    // ,executionContext: ExecutionContextExecutor
-    // ,supervisorStrategy: Option[SupervisorStrategy] = None
-  )(onRequest: ByteString => Future[IOCommand])(
-    implicit actorSystem: ActorSystem
-  ): Future[TCPServiceRef] = {
+   def apply (
+      name: String,
+      tcpConfig: TCPConfigForServer,
+      streamConfig: StreamConfig,
+      debug: Boolean
+      // ,executionContext: ExecutionContextExecutor
+      // ,supervisorStrategy: Option[SupervisorStrategy] = None
+   )(onRequest: ByteString => Future[IOCommand])(
+      implicit actorSystem: ActorSystem
+   ): Future[TCPServiceRef] = {
 
-    val props = Director.props(name, tcpConfig, streamConfig, debug)(onRequest)
+      val props = Director.props(name, tcpConfig, streamConfig, debug)(onRequest)
 
-    val actorRef = actorSystem.actorOf(props, name)
+      val actorRef = actorSystem.actorOf(props, name)
 
-    val ref: TCPServiceRefImpl =
-      new TCPServiceRefImpl(
-        actorRef,
-        actorSystem.dispatcher,
-        60 seconds
-      )
+      val ref: TCPServiceRefImpl =
+         new TCPServiceRefImpl(
+            actorRef,
+            actorSystem.dispatcher,
+            60 seconds
+         )
 
-    ref.waitUntilActivation()
-  }
+      ref.waitUntilActivation()
+   }
 
 }
 
-class TCPServiceRefImpl(
-  val ref: ActorRef,
-  ec: ExecutionContextExecutor,
-  timeout: FiniteDuration
+class TCPServiceRefImpl (
+   val ref: ActorRef,
+   ec: ExecutionContextExecutor,
+   timeout: FiniteDuration
 ) extends TCPServiceRef {
 
-  private implicit val akkaTimeout = Timeout(timeout)
-  private implicit val internalEC = ec
+   private implicit val akkaTimeout = Timeout(timeout)
+   private implicit val internalEC = ec
 
-  private def unexp[T](t: T) =
-    throw new RuntimeException(s"Unexpected Response from director: ${t}")
+   private def unexp[T] (t: T) =
+      throw new RuntimeException(s"Unexpected Response from director: ${t}")
 
-  private def getState(): Future[Director.State] =
-    ask(ref, Director.Command.GetState).map{
-      case state: Director.State => state
-      case any => unexp(any)
-    }
+   private def getState (): Future[Director.State] =
+      ask(ref, Director.Command.GetState).map {
+         case state: Director.State => state
+         case any => unexp(any)
+      }
 
-  def isActive(): Future[Boolean] = {
-    getState().map {
-      case _:Director.State.Bound => true
-      case _ => false
-    }
-  }
+   def isActive (): Future[Boolean] = {
+      getState().map {
+         case _: Director.State.Bound => true
+         case _ => false
+      }
+   }
 
-  def shutdown(): Future[Unit] = {
-    ask(ref, Director.Command.Unbind).map{
-      case Director.State.Unbound => ()
-      case any => unexp(any)
-    }
-  }
+   def shutdown (): Future[Unit] = {
+      ask(ref, Director.Command.Unbind).map {
+         case Director.State.Unbound => ()
+         case any => unexp(any)
+      }
+   }
 
 
-  def waitUntilActivation(): Future[this.type] = {
-    def loop():Future[Director.State] = getState().flatMap {
-      case Director.State.Binding => loop()
-      case st:Director.State.Bound => Future successful st
-      case invalid => Future failed new RuntimeException(s"Invalid State: ${invalid}")
-    }
-    loop.map(_ => this)
-  }
+   def waitUntilActivation (): Future[this.type] = {
+      def loop (): Future[Director.State] = getState().flatMap {
+         case Director.State.Binding => loop()
+         case st: Director.State.Bound => Future successful st
+         case invalid => Future failed new RuntimeException(s"Invalid State: ${invalid}")
+      }
+      loop.map(_ => this)
+   }
 
 }

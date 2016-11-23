@@ -9,34 +9,36 @@ import scala.collection.mutable
 /**
   * @author Reza Samei <reza.samei.g@gmail.com>
   */
-class Writer(director: ActorRef) extends ActorPublisher[ByteString] {
+class Writer (director: ActorRef) extends ActorPublisher[ByteString] {
 
-  import ActorPublisherMessage._
+   import ActorPublisherMessage._
 
-  override def preStart(): Unit = {
-    context watch director
-  }
+   override def preStart (): Unit = {
+      context watch director
+   }
 
-  val queue = mutable.Queue.empty[ByteString]
+   val queue = mutable.Queue.empty[ByteString]
 
-  def deliver(): Unit =
-    while(totalDemand > 0 && queue.nonEmpty)
-      onNext(queue.dequeue())
+   def deliver (): Unit =
+      while (totalDemand > 0 && queue.nonEmpty)
+         onNext(queue.dequeue())
 
-  def send(request: ByteString) = {
-    queue enqueue request
-    deliver()
-  }
+   def send (request: ByteString) = {
+      queue enqueue request
+      deliver()
+   }
 
-  def receive: Receive = {
-    case request: ByteString => send(request)
-    case Request(n) => deliver()
-    case Cancel => context stop self
-    case Terminated(ref /* director */) => context stop self
-  }
+   def receive: Receive = {
+      case request: ByteString => send(request)
+      case Request(n) => deliver()
+      case Cancel => context stop self
+      case Terminated(ref /* director */) => context stop self
+   }
 
 }
 
 object Writer {
-  def props(director: ActorRef) = Props { new Writer(director) }
+   def props (director: ActorRef) = Props {
+      new Writer(director)
+   }
 }

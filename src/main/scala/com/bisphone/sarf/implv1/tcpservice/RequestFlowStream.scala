@@ -18,79 +18,80 @@ import scala.concurrent.Future
   */
 private[implv1] object RequestFlowStream {
 
-  private def slicer(
-    name: String,
-    byteOrder: ByteOrder,
-    maxSize: Int
-  ): GraphStage[FlowShape[ByteString, ByteString]] =
-    ByteStreamSlicer(name, Constant.lenOfLenField, maxSize, byteOrder)
+   private def slicer (
+      name: String,
+      byteOrder: ByteOrder,
+      maxSize: Int
+   ): GraphStage[FlowShape[ByteString, ByteString]] =
+      ByteStreamSlicer(name, Constant.lenOfLenField, maxSize, byteOrder)
 
-  def apply(
-    name: String,
-    conf: StreamConfig,
-    connectionAgent: Props,
-    logger: Logger,
-    debug: Boolean
-  )(
-    fn: ByteString => Future[IOCommand]
-  ): Flow[ByteString, ByteString, ActorRef] = {
+   def apply (
+      name: String,
+      conf: StreamConfig,
+      connectionAgent: Props,
+      logger: Logger,
+      debug: Boolean
+   )(
+      fn: ByteString => Future[IOCommand]
+   ): Flow[ByteString, ByteString, ActorRef] = {
 
-    val maxSliceSize = conf.maxSliceSize
-    val byteOrder = conf.byteOrder
-    val concurrencyPerConnection = conf.concurrencyPerConnection
+      val maxSliceSize = conf.maxSliceSize
+      val byteOrder = conf.byteOrder
+      val concurrencyPerConnection = conf.concurrencyPerConnection
 
-    val sureDebug = debug && logger.isDebugEnabled()
+      val sureDebug = debug && logger.isDebugEnabled()
 
-    def logBytes(subject: String): ByteString => ByteString = bytes => {
-      val arr = bytes.toArray
-      val iter = arr.iterator
+      def logBytes (subject: String): ByteString => ByteString = bytes => {
+         val arr = bytes.toArray
+         val iter = arr.iterator
 
-      val str = if (arr.size > 1) {
-        val buf = new StringBuilder
-        buf.append(iter.next() & 0xFF)
-        while(iter.hasNext) {
-          buf.append(", ").append(iter.next() & 0xFF)
-        }
-        buf.toString()
-      } else if (arr.size == 1) (iter.next() & 0xFF).toString else ""
+         val str = if (arr.size > 1) {
+            val buf = new StringBuilder
+            buf.append(iter.next() & 0xFF)
+            while (iter.hasNext) {
+               buf.append(", ").append(iter.next() & 0xFF)
+            }
+            buf.toString()
+         } else if (arr.size == 1) (iter.next() & 0xFF).toString else ""
 
-      logger debug s"""{
-                 |'subject': '${subject}',
-                 |'bytes': [${str}]
-                 |}""".stripMargin
+         logger debug
+            s"""{
+                |'subject': '${subject}',
+                |'bytes': [${str}]
+                |}""".stripMargin
 
-      bytes
-    }
-
-    val sourceOfAgent = Source.actorPublisher[IOCommand](connectionAgent)
-
-    val graph = GraphDSL.create(sourceOfAgent) { implicit builder => source =>
-
-      import GraphDSL.Implicits._
-
-      val mergeStage = builder add Merge[IOCommand](2, eagerComplete = true)
-
-      source ~> mergeStage
-
-      val slicerStage: FlowShape[ByteString, ByteString] = {
-        val a = Flow[ByteString] via slicer(s"${name}.slicer", byteOrder, maxSliceSize)
-        val b = if (sureDebug) a map logBytes("ByteInputStream") else a
-        builder add b
+         bytes
       }
 
-      slicerStage
-        .map(_.drop(Constant.lenOfLenField)) // Remove len-filed from stream
-        .mapAsync(concurrencyPerConnection)(fn)~> mergeStage
+      val sourceOfAgent = Source.actorPublisher[IOCommand](connectionAgent)
 
-      // IOCommandTransformer will add len-field when it's needed
-      val merged = mergeStage.out.via(new IOCommandTransformer(name, conf.byteOrder, debug, logger))
+      val graph = GraphDSL.create(sourceOfAgent) { implicit builder => source =>
 
-      val result = if (sureDebug) merged map logBytes("ByteOutputStream") else merged
+         import GraphDSL.Implicits._
 
-      FlowShape(slicerStage.in, result.outlet)
-    }
+         val mergeStage = builder add Merge[IOCommand](2, eagerComplete = true)
 
-    Flow fromGraph graph
-  }
+         source ~> mergeStage
+
+         val slicerStage: FlowShape[ByteString, ByteString] = {
+            val a = Flow[ByteString] via slicer(s"${name}.slicer", byteOrder, maxSliceSize)
+            val b = if (sureDebug) a map logBytes("ByteInputStream") else a
+            builder add b
+         }
+
+         slicerStage
+            .map(_.drop(Constant.lenOfLenField)) // Remove len-filed from stream
+            .mapAsync(concurrencyPerConnection)(fn) ~> mergeStage
+
+         // IOCommandTransformer will add len-field when it's needed
+         val merged = mergeStage.out.via(new IOCommandTransformer(name, conf.byteOrder, debug, logger))
+
+         val result = if (sureDebug) merged map logBytes("ByteOutputStream") else merged
+
+         FlowShape(slicerStage.in, result.outlet)
+      }
+
+      Flow fromGraph graph
+   }
 
 }

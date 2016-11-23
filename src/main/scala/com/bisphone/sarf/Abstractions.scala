@@ -15,7 +15,7 @@ import scala.util.control.NonFatal
   */
 
 object Constant {
-  def lenOfLenField: Int = 4
+   def lenOfLenField: Int = 4
 }
 
 // ========================================================================
@@ -24,13 +24,13 @@ sealed trait IOCommand
 
 object IOCommand {
 
-  case class Send (bytes: ByteString) extends IOCommand
+   case class Send (bytes: ByteString) extends IOCommand
 
-  case object Close extends IOCommand
+   case object Close extends IOCommand
 
-  case object KeepGoing extends IOCommand
+   case object KeepGoing extends IOCommand
 
-  case class SendAndClose(bytes: ByteString) extends IOCommand
+   case class SendAndClose (bytes: ByteString) extends IOCommand
 
 }
 
@@ -38,94 +38,95 @@ object IOCommand {
 
 trait TypeKey[T] extends Serializable {
 
-  def typeKey: Int
+   def typeKey: Int
 
-  def unapply(other: Int): Boolean = other == typeKey
+   def unapply (other: Int): Boolean = other == typeKey
 
-  def unapply[O <: T](other: TypeKey[O]): Boolean = unapply(other.typeKey)
+   def unapply[O <: T] (other: TypeKey[O]): Boolean = unapply(other.typeKey)
 
-  override def toString(): String = s"TypeKey(${getClass.getName}: ${typeKey})"
+   override def toString (): String = s"TypeKey(${getClass.getName}: ${typeKey})"
 }
 
 object TypeKey {
-  class FreeTypeKey(override val typeKey: Int) extends TypeKey[Nothing]
-  def apply[T](key: Int): TypeKey[T] = new FreeTypeKey(key).asInstanceOf[TypeKey[T]]
+
+   class FreeTypeKey (override val typeKey: Int) extends TypeKey[Nothing]
+
+   def apply[T] (key: Int): TypeKey[T] = new FreeTypeKey(key).asInstanceOf[TypeKey[T]]
 }
 
 
-
 sealed trait Frame {
-  def dispatchKey: TypeKey[_]
+   def dispatchKey: TypeKey[_]
 }
 
 trait UntrackedFrame[Fr <: TrackedFrame] extends Frame
 
 trait TrackedFrame extends Frame {
 
-  def trackingKey: Int
+   def trackingKey: Int
 
-  def bytes: ByteString
+   def bytes: ByteString
 
 }
 
 // ========================================================================
 
 trait Writer[T, Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
-  def write (t: T): UFr
+   def write (t: T): UFr
 }
 
 trait FrameWriter[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
-  def writeFrame(uf: UFr, trackingKey: Int): Fr
+   def writeFrame (uf: UFr, trackingKey: Int): Fr
 }
 
 trait FrameReader[Fr <: TrackedFrame] {
-  def readFrame(bytes: ByteString): Fr
+   def readFrame (bytes: ByteString): Fr
 }
 
 trait Reader[T, Fr <: TrackedFrame] {
-  def read(t: Fr): T
+   def read (t: Fr): T
 }
 
 // ========================================================================
 
 sealed class SARFException (
-  subject: String,
-  cause: Throwable = null
+   subject: String,
+   cause: Throwable = null
 ) extends RuntimeException(subject, cause)
 
 sealed class SARFRemoteException (
-  subject: String,
-  cause: Throwable = null
+   subject: String,
+   cause: Throwable = null
 ) extends SARFException(subject, cause)
 
 sealed class FrameProcessingFailure[Fr <: Frame] (
-  val frame: Fr,
-  subject: String,
-  cause: Throwable = null
+   val frame: Fr,
+   subject: String,
+   cause: Throwable = null
 ) extends SARFException(subject, cause)
 
 class UnsupporetdDispatchKey[Fr <: Frame] (
-  frame: Fr,
-  subject: String,
-  cause: Throwable = null
+   frame: Fr,
+   subject: String,
+   cause: Throwable = null
 ) extends FrameProcessingFailure(frame, subject, cause)
 
 // ========================================================================
 
 trait FailureHandler
-  extends ((Throwable, ByteString) => Future[IOCommand])
+   extends ((Throwable, ByteString) => Future[IOCommand])
 
 trait Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]]
-  extends (ByteString => Future[IOCommand])
+   extends (ByteString => Future[IOCommand])
 
 // ========================================================================
 // Server
 
 trait TCPServiceRef {
 
-  def isActive: Future[Boolean]
+   def isActive: Future[Boolean]
 
-  def shutdown: Future[Unit]
+   def shutdown: Future[Unit]
 
 }
 
@@ -134,35 +135,35 @@ trait TCPServiceRef {
 
 trait TCPClientRef[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
 
-  def isActive(): Future[Boolean]
+   def isActive (): Future[Boolean]
 
-  def send(rq: UFr): Future[Fr]
+   def send (rq: UFr): Future[Fr]
 
-  def close(): Future[Unit]
+   def close (): Future[Unit]
 
-  def call[Rq, Rs, Er] (rq: Rq)(
-    implicit
-    rqKey: TypeKey[Rq],
-    rsKey: TypeKey[Rs],
-    erKey: TypeKey[Er],
-    rqWriter: Writer[Rq, Fr, UFr],
-    rsReader: Reader[Rs, Fr],
-    erReader: Reader[Er, Fr]
-  ): AsyncResult[Er, Rs]
+   def call[Rq, Rs, Er] (rq: Rq)(
+      implicit
+      rqKey: TypeKey[Rq],
+      rsKey: TypeKey[Rs],
+      erKey: TypeKey[Er],
+      rqWriter: Writer[Rq, Fr, UFr],
+      rsReader: Reader[Rs, Fr],
+      erReader: Reader[Er, Fr]
+   ): AsyncResult[Er, Rs]
 
-  def call[Rq, Rs, Er](
-    rq: Rq,
-    rqTC: TypeComplementary[Rq, Fr, UFr],
-    rsTC: TypeComplementary[Rs, Fr, UFr],
-    erTC: TypeComplementary[Er, Fr, UFr]
-  ): AsyncResult[Er, Rs] = call(rq)(
-    rqTC.dispatchKey,
-    rsTC.dispatchKey,
-    erTC.dispatchKey,
-    rqTC.writer,
-    rsTC.reader,
-    erTC.reader
-  )
+   def call[Rq, Rs, Er] (
+      rq: Rq,
+      rqTC: TypeComplementary[Rq, Fr, UFr],
+      rsTC: TypeComplementary[Rs, Fr, UFr],
+      erTC: TypeComplementary[Er, Fr, UFr]
+   ): AsyncResult[Er, Rs] = call(rq)(
+      rqTC.dispatchKey,
+      rsTC.dispatchKey,
+      erTC.dispatchKey,
+      rqTC.writer,
+      rsTC.reader,
+      erTC.reader
+   )
 
 }
 
@@ -170,25 +171,27 @@ trait TCPClientRef[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
 // Server Stats
 
 trait StatTag[T] extends Serializable {
-  def tag: String
+   def tag: String
 
-  override def toString(): String = s"StatTag(${getClass.getName}: ${tag})"
+   override def toString (): String = s"StatTag(${getClass.getName}: ${tag})"
 }
 
 object StatTag {
-  private class FreeStatTag(override val tag: String) extends StatTag[Nothing]
-  def apply[T](tag: String): StatTag[T] = new FreeStatTag(tag).asInstanceOf[StatTag[T]]
+
+   private class FreeStatTag (override val tag: String) extends StatTag[Nothing]
+
+   def apply[T] (tag: String): StatTag[T] = new FreeStatTag(tag).asInstanceOf[StatTag[T]]
 }
 
 trait StatCollector {
 
-  def done[T] (tag: StatTag[T], duration: Long): Unit
+   def done[T] (tag: StatTag[T], duration: Long): Unit
 
-  def failed[T](tag: StatTag[T], duration: Long)
+   def failed[T] (tag: StatTag[T], duration: Long)
 
-  def read[T] (tag: StatTag[T], bytes: Long): Unit
+   def read[T] (tag: StatTag[T], bytes: Long): Unit
 
-  def wrote[T] (tag: StatTag[T], bytes: Long): Unit
+   def wrote[T] (tag: StatTag[T], bytes: Long): Unit
 
 }
 
@@ -197,12 +200,12 @@ trait StatCollector {
 
 trait TypeComplementary[T, Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
 
-  implicit val dispatchKey: TypeKey[T]
+   implicit val dispatchKey: TypeKey[T]
 
-  implicit val statTag: StatTag[T]
+   implicit val statTag: StatTag[T]
 
-  implicit val writer: Writer[T, Fr, UFr]
+   implicit val writer: Writer[T, Fr, UFr]
 
-  implicit val reader: Reader[T, Fr]
+   implicit val reader: Reader[T, Fr]
 
 }

@@ -11,37 +11,39 @@ import scala.collection.mutable
 /**
   * @author Reza Samei <reza.samei.g@gmail.com>
   */
-private[implv1] class ConnectionAgent(logger: Logger) extends ActorPublisher[IOCommand] {
+private[implv1] class ConnectionAgent (logger: Logger) extends ActorPublisher[IOCommand] {
 
-  val queue = mutable.Queue.empty[IOCommand]
+   val queue = mutable.Queue.empty[IOCommand]
 
-  def tryDeliver(): Unit = {
-    if (totalDemand > 0 && queue.nonEmpty) onNext(queue dequeue)
-  }
+   def tryDeliver (): Unit = {
+      if (totalDemand > 0 && queue.nonEmpty) onNext(queue dequeue)
+   }
 
-  private def tryPush(cmd: IOCommand): Unit = {
-    queue enqueue cmd
-    tryDeliver()
-  }
+   private def tryPush (cmd: IOCommand): Unit = {
+      queue enqueue cmd
+      tryDeliver()
+   }
 
-  def receive: Receive = {
-    case cmd:IOCommand => tryPush(cmd)
-    case Request(_) => tryDeliver()
-    case Cancel =>
-      if (logger.isDebugEnabled()) logger.debug(s"Actor($self) received 'Cancel' signal!")
-      context stop self
-  }
+   def receive: Receive = {
+      case cmd: IOCommand => tryPush(cmd)
+      case Request(_) => tryDeliver()
+      case Cancel =>
+         if (logger.isDebugEnabled()) logger.debug(s"Actor($self) received 'Cancel' signal!")
+         context stop self
+   }
 
-  override def preStart(): Unit = {
-    if (logger.isDebugEnabled()) logger.debug(s"Actor($self) preStart")
-  }
+   override def preStart (): Unit = {
+      if (logger.isDebugEnabled()) logger.debug(s"Actor($self) preStart")
+   }
 
-  override def postStop(): Unit = {
-    if (logger.isDebugEnabled()) logger.debug(s"Actor($self) postStop")
-  }
+   override def postStop (): Unit = {
+      if (logger.isDebugEnabled()) logger.debug(s"Actor($self) postStop")
+   }
 
 }
 
 private[implv1] object ConnectionAgent {
-  def props(logger: Logger) = Props { new ConnectionAgent(logger) }
+   def props (logger: Logger) = Props {
+      new ConnectionAgent(logger)
+   }
 }

@@ -14,133 +14,155 @@ import scala.concurrent.duration._
 /**
   * @author Reza Samei <reza.samei.g@gmail.com>
   */
-private[implv1] class Director(
-  name: String,
-  tcp: TCPConfigForServer,
-  stream: StreamConfig,
-  debug: Boolean,
-  onRequest: ByteString => Future[IOCommand]
+private[implv1] class Director (
+   name: String,
+   tcp: TCPConfigForServer,
+   stream: StreamConfig,
+   debug: Boolean,
+   onRequest: ByteString => Future[IOCommand]
 ) extends Actor {
 
-  val logger = LoggerFactory getLogger name
+   val logger = LoggerFactory getLogger name
 
-  var st:Director.State = Director.State.Binding
+   var st: Director.State = Director.State.Binding
 
-  override val supervisorStrategy = AllForOneStrategy(
-    maxNrOfRetries = 3,
-    withinTimeRange = 5 minutes,
-    loggingEnabled = true
-  ){
-    case cause: Director.Exception.SocketBindFailure => SupervisorStrategy.Restart
-  }
+   override val supervisorStrategy = AllForOneStrategy(
+      maxNrOfRetries = 3,
+      withinTimeRange = 5 minutes,
+      loggingEnabled = true
+   ) {
+      case cause: Director.Exception.SocketBindFailure => SupervisorStrategy.Restart
+   }
 
-  override def preStart(): Unit = {
+   override def preStart (): Unit = {
 
-    val flow =
-      RequestFlowStream(
-        s"${name}::RequestFlow",
-        stream,
-        ConnectionAgent.props(logger),
-        logger,
-        debug
-      )(onRequest)
+      val flow =
+         RequestFlowStream(
+            s"${name}::RequestFlow",
+            stream,
+            ConnectionAgent.props(logger),
+            logger,
+            debug
+         )(onRequest)
 
-    val connectionManager: ActorRef = context.actorOf(
-      ConnectionManager.props(logger),
-      "connections"
-    )
+      val connectionManager: ActorRef = context.actorOf(
+         ConnectionManager.props(logger),
+         "connections"
+      )
 
-    val socketManager: ActorRef = context.actorOf(
-      SocketManager.props(tcp, connectionManager, flow, logger),
-      "socket"
-    )
+      val socketManager: ActorRef = context.actorOf(
+         SocketManager.props(tcp, connectionManager, flow, logger),
+         "socket"
+      )
 
-    context become initialized(connectionManager, socketManager)
-  }
+      context become initialized(connectionManager, socketManager)
+   }
 
-  override def postStop(): Unit = stop
+   override def postStop (): Unit = stop
 
-  val initializing: Receive = {
-    case Director.Command.GetState => sender ! st
-  }
+   val initializing: Receive = {
+      case Director.Command.GetState => sender ! st
+   }
 
-  def initialized(
-    connectionManager: ActorRef,
-    socketManger: ActorRef
-  ): Receive = {
-    case Director.Command.GetState => sender ! st
-    case st: Director.State => updateSt(st)
-    case Director.Command.Unbind =>
-      socketManger ! Director.Command.UnbindByDemand(sender)
-    case Director.Event.UnboundByDemand(requestors) =>
-      requestors.foreach{ _ ! Director.State.Unbound }
-      stop
-  }
+   def initialized (
+      connectionManager: ActorRef,
+      socketManger: ActorRef
+   ): Receive = {
+      case Director.Command.GetState => sender ! st
+      case st: Director.State => updateSt(st)
+      case Director.Command.Unbind =>
+         socketManger ! Director.Command.UnbindByDemand(sender)
+      case Director.Event.UnboundByDemand(requestors) =>
+         requestors.foreach {
+            _ ! Director.State.Unbound
+         }
+         stop
+   }
 
-  def receive: Receive = initializing
+   def receive: Receive = initializing
 
-  def updateSt(st: Director.State): Unit = {
-    val old = this.st
-    this.st = st
-    if (logger.isInfoEnabled()) logger info
-      s"""{
-          |'subject': 'Director.ChangeState',
-          |'oldState': '${old}'
-          |'newState': '${st}'
-          |}""".stripMargin
-  }
+   def updateSt (st: Director.State): Unit = {
+      val old = this.st
+      this.st = st
+      if (logger.isInfoEnabled()) logger info
+         s"""{
+             |'subject': 'Director.ChangeState',
+             |'oldState': '${old}'
+             |'newState': '${st}'
+             |}""".stripMargin
+   }
 
-  def stop = {
-    if (logger.isInfoEnabled()) logger info "{'subject': 'Director.Stopping'}"
-    context stop self
-  }
+   def stop = {
+      if (logger.isInfoEnabled()) logger info "{'subject': 'Director.Stopping'}"
+      context stop self
+   }
 
 }
 
 private[implv1] object Director {
 
-  def props(
-    name: String,
-    tcp: TCPConfigForServer,
-    stream: StreamConfig,
-    debug: Boolean
-  )(
-    onRequest: ByteString => Future[IOCommand]
-  ) = Props { new Director(name, tcp, stream, debug, onRequest) }
+   def props (
+      name: String,
+      tcp: TCPConfigForServer,
+      stream: StreamConfig,
+      debug: Boolean
+   )(
+      onRequest: ByteString => Future[IOCommand]
+   ) = Props {
+      new Director(name, tcp, stream, debug, onRequest)
+   }
 
-  trait State
+   trait State
 
-  object State {
-    case object Binding extends State
-    case class Bound(ref: Tcp.ServerBinding) extends State
-    case object Unbinding extends State
-    case object Unbound extends State
-  }
+   object State {
 
-  trait Command
-  object Command {
-    case object Unbind extends Command
-    case class UnbindByDemand(requestor: ActorRef) extends Command
-    case object GetState extends Command
-  }
+      case object Binding extends State
 
-  trait Event
-  object Event {
-    case class NewConnection(
-      ref: Tcp.IncomingConnection,
-      director: ActorRef
-    ) extends Event
-    case class UnboundByDemand(requestors: List[ActorRef]) extends Event
-  }
+      case class Bound (ref: Tcp.ServerBinding) extends State
 
-  sealed class Exception(
-    msg: String,
-    cause: Throwable = null
-  ) extends RuntimeException(msg, cause)
-  object Exception {
-    class SocketBindFailure (
+      case object Unbinding extends State
+
+      case object Unbound extends State
+
+   }
+
+   trait Command
+
+   object Command {
+
+      case object Unbind extends Command
+
+      case class UnbindByDemand (requestor: ActorRef) extends Command
+
+      case object GetState extends Command
+
+   }
+
+   trait Event
+
+   object Event {
+
+      case class NewConnection (
+         ref: Tcp.IncomingConnection,
+         director: ActorRef
+      ) extends Event
+
+      case class UnboundByDemand (requestors: List[ActorRef]) extends Event
+
+   }
+
+   sealed class Exception (
       msg: String,
       cause: Throwable = null
-    ) extends Director.Exception(msg, cause)
-  }
+   ) extends RuntimeException(msg, cause)
+
+   object Exception {
+
+      class SocketBindFailure (
+         msg: String,
+         cause: Throwable = null
+      ) extends Director.Exception(msg, cause)
+
+   }
+
 }
