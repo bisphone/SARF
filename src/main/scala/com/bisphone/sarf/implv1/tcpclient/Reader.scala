@@ -22,9 +22,14 @@ class Reader (director: ActorRef, demands: Int) extends ActorSubscriber {
 
    override def receive: Receive = {
       case OnNext(bytes: ByteString) => director ! Director.Event.Received(bytes)
-      case OnComplete => context stop self
-      case OnError(cause) => director ! Director.Event.StreamHasFailed(cause)
-      case Terminated(ref /*director*/) => context stop self
+      case OnComplete =>
+         context stop self
+      case OnError(cause) =>
+         // Maybe the cause of problem
+         // director ! Director.Event.StreamHasFailed(cause)
+         context stop self
+      case Terminated(ref /*director*/) =>
+         context stop self
    }
 
 }

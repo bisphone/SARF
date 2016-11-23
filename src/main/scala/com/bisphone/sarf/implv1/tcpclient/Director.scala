@@ -78,9 +78,9 @@ private[implv1] object Director {
 
       case class Failed (cause: Option[Throwable] = None)
 
-      case object StreamHasClosed extends Event
+      // case object StreamHasClosed extends Event
 
-      case class StreamHasFailed (cause: Throwable) extends Event
+      // case class StreamHasFailed (cause: Throwable) extends Event
 
       case class Expired (sub: String) extends Event
 
