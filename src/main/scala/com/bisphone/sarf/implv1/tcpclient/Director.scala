@@ -25,14 +25,13 @@ private[implv1] object Director {
       tcp: TCPConfigForClient,
       stream: StreamConfig,
       writer: FrameWriter[Fr, UFr],
-      reader: FrameReader[Fr],
-      debug: Boolean
+      reader: FrameReader[Fr]
    )(
       implicit
       fr$tag: ClassTag[Fr],
       uf$tag: ClassTag[UFr]
    ) = Props {
-      new Director(name, tcp, stream, writer, reader, debug)
+      new Director(name, tcp, stream, writer, reader)
    }
 
    // Controlling & Debug & Health Issue
@@ -127,8 +126,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
    tcp: TCPConfigForClient,
    stream: StreamConfig,
    writer: FrameWriter[Fr, UFr],
-   reader: FrameReader[Fr],
-   debug: Boolean
+   reader: FrameReader[Fr]
 )(
    implicit
    fr$tag: ClassTag[Fr],
@@ -145,6 +143,8 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
    val loggerName = s"SARFClient(${name}).Director"
    val logger = LoggerFactory getLogger loggerName
+
+   val debug = logger.isDebugEnabled()
 
    val tracker = new Director.Tracker
 
@@ -163,7 +163,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
          if (logger isWarnEnabled ) logger warn
             s"""{
-                |"subject":               "Connecting.Send => Can't Send",
+                |"subject":               "${loggerName}.Connecting.Send => Can't Send",
                 |"untrackedDispatchKey":  ${rq.dispatchKey}
                 |}""".stripMargin
 
@@ -173,7 +173,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
          if (logger isWarnEnabled ()) logger warn
             s"""{
-                |"subject":      "Connecting => Connected",
+                |"subject":      "${loggerName}.Connecting => Connected",
                 |"publisher":    "${ev.publisher}",
                 |"consumer":     "${ev.consumer}",
                 |"connection":   "${ev.conn}"
@@ -187,7 +187,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
          if (logger isWarnEnabled ()) logger warn
             s"""{
-                |"subject":      "Connecting.Expired => Stop",
+                |"subject":      "${loggerName}.Connecting.Expired => Stop",
                 |"tcpConfig":    "$tcp"
                 |}""".stripMargin
 
@@ -197,7 +197,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
          if (logger isErrorEnabled ()) logger error(
             s"""{
-                |"subject":      "Connecting.Failed => Stop",
+                |"subject":      "${loggerName}.Connecting.Failed => Stop",
                 |"tcpConfig":    "$tcp"
                 |}""".stripMargin, cause.orNull
             )
@@ -221,7 +221,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
          if (logger.isDebugEnabled()) logger debug
             s"""{
-                |"subject":      "Connected.Send => Sending",
+                |"subject":      "${loggerName}.Connected.Send => Sending",
                 |"dispatchKey":  ${frame.dispatchKey},
                 |"trackingCode": $tk,
                 |"bytes":        "${frame.bytes.size}"
@@ -237,7 +237,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
                if (logger.isDebugEnabled()) logger debug
                   s"""{
-                      |"subject":         "Connected.Received => Deliver",
+                      |"subject":         "${loggerName}.Connected.Received => Deliver",
                       |"responseKey":     ${frame.dispatchKey},
                       |"trackingCode":    ${frame.trackingKey},
                       |"bytes":           ${frame.bytes.size}
@@ -249,7 +249,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
                if (logger.isErrorEnabled()) logger error
                   s"""{
-                      |"subject":      "Connected.Received => throw UnrequestedResponse!",
+                      |"subject":      "${loggerName}.Connected.Received => throw UnrequestedResponse!",
                       |"responseKey":  ${frame.dispatchKey},
                       |"trackingCode": ${frame.trackingKey},
                       |"bytes":        ${frame.bytes.size}
@@ -260,7 +260,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       case Command.Disconnect =>
 
-         if (logger isInfoEnabled ()) logger info """{"subject": "Connected.Disconnect"}"""
+         if (logger isInfoEnabled ()) logger info s"""{"subject": "${loggerName}.Connected.Disconnect"}"""
 
          ev.publisher ! PoisonPill
 
@@ -272,7 +272,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
          if (logger isWarnEnabled ()) logger warn
             s"""{
-                |"subject":      "Connected.TerminatedWorker => IOException",
+                |"subject":      "${loggerName}.Connected.TerminatedWorker => IOException",
                 |"actor":        "${self},
                 |"worker":       "${ref}"
                 |}""".stripMargin
@@ -286,7 +286,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       case Command.Disconnect =>
 
-         if (logger.isDebugEnabled()) logger debug """{"subject": "Disconnecting.Disconnect => Nothing"}"""
+         if (logger.isDebugEnabled()) logger debug s"""{"subject": "${loggerName}.Disconnecting.Disconnect => Nothing"}"""
 
          disconnectRequesters += sender()
 
@@ -294,7 +294,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
          if (logger isWarnEnabled  ()) logger warn
             s"""{
-                |"subject":   "Disconnecting.TerminateWorder => Stop",
+                |"subject":   "${loggerName}.Disconnecting.TerminateWorder => Stop",
                 |"actor":     "${self}",
                 |"worker":    "${ref}"
                 |}""".stripMargin
@@ -307,7 +307,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       case Event.Expired(_) =>
 
-         if (logger isWarnEnabled ()) logger warn """{"subject": "Disconnecting.Expired => Stop"}"""
+         if (logger isWarnEnabled ()) logger warn s"""{"subject": "${loggerName}.Disconnecting.Expired => Stop"}"""
 
          disconnectRequesters.foreach {
             _ ! unit
@@ -322,7 +322,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       if (logger isWarnEnabled ()) logger warn
           s"""{
-             |"subject":      "preStart",
+             |"subject":      "${loggerName}.preStart",
              |"actor":        "${self}",
              |"state":        "${state}",
              |"tracker":      "${tracker}",
@@ -355,7 +355,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       if (logger isWarnEnabled ()) logger warn
          s"""{
-             |"subject":      "postStop",
+             |"subject":      "${loggerName}.postStop",
              |"actor":        "${self}",
              |"state":        "${state}",
              |"tracker":      "${tracker}",

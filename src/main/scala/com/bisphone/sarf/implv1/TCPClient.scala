@@ -24,8 +24,7 @@ object TCPClient {
       tcp: TCPConfigForClient,
       stream: StreamConfig,
       writer: FrameWriter[Fr, UFr],
-      reader: FrameReader[Fr],
-      debug: Boolean
+      reader: FrameReader[Fr]
    )(
       implicit
       actorSystem: ActorSystem,
@@ -33,7 +32,7 @@ object TCPClient {
       uf$tag: ClassTag[UFr]
    ): Future[TCPClientRef[Fr, UFr]] = {
 
-      val props = Director.props(name, tcp, stream, writer, reader, debug)
+      val props = Director.props(name, tcp, stream, writer, reader)
 
       val actorRef = actorSystem.actorOf(props, name)
 

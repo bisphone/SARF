@@ -22,7 +22,8 @@ private[implv1] class Director (
    onRequest: ByteString => Future[IOCommand]
 ) extends Actor {
 
-   val logger = LoggerFactory getLogger name
+   val loggerName = s"SARFServer(${name}).Director"
+   val logger = LoggerFactory getLogger loggerName
 
    var st: Director.State = Director.State.Binding
 
@@ -38,7 +39,7 @@ private[implv1] class Director (
 
       val flow =
          RequestFlowStream(
-            s"${name}::RequestFlow",
+            name,
             stream,
             ConnectionAgent.props(logger),
             logger,
@@ -46,16 +47,22 @@ private[implv1] class Director (
          )(onRequest)
 
       val connectionManager: ActorRef = context.actorOf(
-         ConnectionManager.props(logger),
+         ConnectionManager.props(name),
          "connections"
       )
 
       val socketManager: ActorRef = context.actorOf(
-         SocketManager.props(tcp, connectionManager, flow, logger),
+         SocketManager.props(name, tcp, connectionManager, flow),
          "socket"
       )
 
       context become initialized(connectionManager, socketManager)
+
+      if (logger isWarnEnabled()) logger warn
+          s"""{
+             |"subject":      "${loggerName}.preStart",
+             |"actor":        "${self}"
+             |}""".stripMargin
    }
 
    override def postStop (): Unit = stop
@@ -68,10 +75,14 @@ private[implv1] class Director (
       connectionManager: ActorRef,
       socketManger: ActorRef
    ): Receive = {
+
       case Director.Command.GetState => sender ! st
+
       case st: Director.State => updateSt(st)
+
       case Director.Command.Unbind =>
          socketManger ! Director.Command.UnbindByDemand(sender)
+
       case Director.Event.UnboundByDemand(requestors) =>
          requestors.foreach {
             _ ! Director.State.Unbound
@@ -86,15 +97,15 @@ private[implv1] class Director (
       this.st = st
       if (logger.isInfoEnabled()) logger info
          s"""{
-             |'subject': 'Director.ChangeState',
-             |'oldState': '${old}'
-             |'newState': '${st}'
+             |"subject":      "${loggerName}.ChangeState",
+             |"oldState":     "${old}",
+             |"newState":     "${st}"
              |}""".stripMargin
    }
 
    def stop = {
-      if (logger.isInfoEnabled()) logger info "{'subject': 'Director.Stopping'}"
-      context stop self
+      if (logger isWarnEnabled ()) logger warn s"""{"subject": "${loggerName}.postStop"}"""
+      try context stop self finally ();
    }
 
 }

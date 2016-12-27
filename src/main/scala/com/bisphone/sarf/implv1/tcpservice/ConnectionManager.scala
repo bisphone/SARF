@@ -4,14 +4,17 @@ import java.net.InetSocketAddress
 
 import akka.actor.{Actor, ActorRef, PoisonPill, Props, Terminated}
 import akka.stream.scaladsl.Tcp
-import org.slf4j.Logger
+import org.slf4j.{Logger, LoggerFactory}
 
 import scala.collection.mutable
 
 /**
   * @author Reza Samei <reza.samei.g@gmail.com>
   */
-class ConnectionManager (logger: Logger) extends Actor {
+class ConnectionManager(name: String) extends Actor {
+
+   val loggerName = s"SARFServer(${name}).ConnectionManager"
+   val logger = LoggerFactory getLogger loggerName
 
    private val dict = mutable.HashMap.empty[ActorRef, Tcp.IncomingConnection]
 
@@ -26,10 +29,12 @@ class ConnectionManager (logger: Logger) extends Actor {
 
          if (logger.isInfoEnabled()) logger info
             s"""{
-                |'subject': 'Connections.New',
-                |'host': '${addr2str(ref.localAddress)}',
-                |'remote': ${addr2str(ref.remoteAddress)},
-                |'totalConnections': ${dict.size}
+                |"subject":      "${loggerName}.New",
+                |"host":         "${addr2str(ref.localAddress)}",
+                |"remote":       "${addr2str(ref.remoteAddress)}",
+                |"actor":        "${self}",
+                |"conn":         "${actor}",
+                |"totalConnections":   ${dict.size}
                 |}""".stripMargin
 
       case Terminated(actor) if dict contains actor =>
@@ -38,20 +43,21 @@ class ConnectionManager (logger: Logger) extends Actor {
 
          if (logger.isInfoEnabled()) logger info
             s"""{
-                |'subject': 'Connections.Closed',
-                |'host': '${addr2str(ref.localAddress)}',
-                |'remote': '${addr2str(ref.remoteAddress)}',
-                |'actor': '${actor}',
-                |'totalConnections': ${dict.size}
+                |"subject":      "${loggerName}.Closed",
+                |"host":         "${addr2str(ref.localAddress)}",
+                |"remote":       "${addr2str(ref.remoteAddress)}",
+                |"actor":        "${self}",
+                |"conn":         "${actor}"
+                |"totalConnections":   ${dict.size}
                 |}""".stripMargin
    }
 
    override def preStart (): Unit = {
-      if (logger.isDebugEnabled()) logger debug "{'subject': 'Connections.PreStart'}"
+      if (logger.isDebugEnabled()) logger debug s"""{"subject": "${loggerName}.preStart"""
    }
 
    override def postStop (): Unit = {
-      if (logger.isDebugEnabled()) logger debug "{'subject': 'Connections.PostStop'}"
+      if (logger.isDebugEnabled()) logger debug s"""{"subject": "${loggerName}.postStop"""
       dict.keys.foreach {
          _ ! PoisonPill
       }
@@ -60,7 +66,7 @@ class ConnectionManager (logger: Logger) extends Actor {
 }
 
 private[implv1] object ConnectionManager {
-   def props (logger: Logger) = Props {
-      new ConnectionManager(logger)
+   def props (name: String) = Props {
+      new ConnectionManager(name)
    }
 }

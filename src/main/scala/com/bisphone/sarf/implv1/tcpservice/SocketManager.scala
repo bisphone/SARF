@@ -5,9 +5,10 @@ import akka.stream.ActorMaterializer
 import akka.stream.scaladsl.{Flow, Sink, Tcp}
 import akka.util.ByteString
 import com.bisphone.sarf.implv1.util.TCPConfigForServer
-import org.slf4j.Logger
+import org.slf4j.{Logger, LoggerFactory}
 import com.bisphone.util._
 import com.bisphone.std._
+
 import scala.collection.mutable
 import scala.concurrent.duration._
 import scala.concurrent.Await
@@ -17,11 +18,14 @@ import scala.concurrent.Await
   * @author Reza Samei <reza.samei.g@gmail.com>
   */
 private[implv1] class SocketManager (
-   config: TCPConfigForServer,
-   connectionManager: ActorRef,
-   requestFlow: Flow[ByteString, ByteString, ActorRef],
-   logger: Logger
+    name: String,
+    config: TCPConfigForServer,
+    connectionManager: ActorRef,
+    requestFlow: Flow[ByteString, ByteString, ActorRef]
 ) extends Actor {
+
+   val loggerName = s"SARFServer(${name}).SockerManger"
+   val logger = LoggerFactory getLogger loggerName
 
    implicit val system = context.system
    implicit val materializer = ActorMaterializer()
@@ -38,19 +42,19 @@ private[implv1] class SocketManager (
 
          if (logger.isInfoEnabled()) logger info
             s"""{
-                |'subject': 'Socket.Bound',
-                |'host': '${config.host}:${config.port}',
-                |'backlog': ${config.backlog}
+                |"subject":         "${loggerName}.Binding => Bound",
+                |"host":            "${config.host}:${config.port}",
+                |"backlog":         ${config.backlog}
                 |}""".stripMargin
 
       case Left(cause: Throwable) =>
 
          if (logger.isErrorEnabled()) logger error(
             s"""{
-                |'subject': 'Socket.BoundFailure',
-                |'host': '${config.host}:${config.port}',
-                |'backlog': ${config.backlog},
-                |'error': '${cause.getMessage}'
+                |"subject":      "${loggerName}.BindingFailure => throw SocketBindingFailure",
+                |"host":         "${config.host}:${config.port}",
+                |"backlog":      ${config.backlog},
+                |"error":        "${cause.getMessage}"
                 |}""".stripMargin, cause)
 
          throw new Director.Exception.SocketBindFailure("Failure in binding", cause)
@@ -60,9 +64,9 @@ private[implv1] class SocketManager (
          context become unbindOnBound
 
          if (logger.isDebugEnabled()) logger debug
-            """{
-              |'subject': 'Socket.*',
-              |'desc': 'Try to unbind not-bound socket'
+            s"""{
+              |"subject":     "${loggerName}.Binding => UnbindByDemand",
+              |"desc":        "Try to unbind not-bound socket"
               |}""".stripMargin
    }
 
@@ -72,7 +76,8 @@ private[implv1] class SocketManager (
          bindingSt = st
 
          if (logger.isDebugEnabled()) logger debug
-            """{
+            s"""{
+              |"subject":     "${loggerName}."
               |'subject': 'Socket.*',
               |'desc': 'Try to unbind newly bound socket'
               |}""".stripMargin
@@ -80,20 +85,24 @@ private[implv1] class SocketManager (
          unbound(st)
 
       case Left(cause: Throwable) =>
+
          if (logger.isWarnEnabled()) logger warn(
             s"""{
-                |'subject': 'Socket.BoundFailure',
-                |'host': '${config.host}:${config.port}',
-                |'backlog': ${config.backlog},
-                |'error': '${cause.getMessage}',
-                |'desc': 'UnbindOnBound'
+                |"subject":     "${loggerName}.UnbindFailure => Stop",
+                |"host":        "${config.host}:${config.port}",
+                |"backlog":     ${config.backlog},
+                |"errorType":   "${cause.getClass.getName}",
+                |"errorMsg":    "${cause.getMessage}",
+                |"desc":         "UnbindOnBound"
                 |}""".stripMargin, cause)
+
+           context stop self
    }
 
    def bound (st: Tcp.ServerBinding): Receive = {
       case Director.Command.UnbindByDemand(requestor) =>
 
-         if (logger.isDebugEnabled()) logger debug "{'subject': 'Socket.Unbind'}"
+         if (logger.isDebugEnabled()) logger debug s"""{"subject":  "${loggerName}.Bound => Unbind"}"""
 
          unbindRequestors += requestor
          unbound(st)
@@ -104,8 +113,8 @@ private[implv1] class SocketManager (
 
          if (logger.isInfoEnabled()) logger info
             s"""{
-                |'subject': 'Socket.Unbound',
-                |'host': '${config.host}:${config.port}'
+                |"subject":         "${loggerName}.Unbound => Stop",
+                |"host":            "${config.host}:${config.port}"
                 |}""".stripMargin
 
          context.parent ! Director.Event.UnboundByDemand(unbindRequestors.toList)
@@ -135,30 +144,29 @@ private[implv1] class SocketManager (
       } to Sink.ignore
 
    override def preStart (): Unit = {
-      if (logger.isDebugEnabled()) logger debug "{'subject': 'Socket.PreStart'}"
       tcpFlow.run.map {
          Right(_)
       }.recover {
          case cause => Left(cause)
       }.foreach(st => self ! st)
-      if (logger.isDebugEnabled()) logger debug "{'subject': 'Socket.Binding'}"
+      if (logger.isDebugEnabled()) logger debug s"""{"subject": "${loggerName}.preStart"}"""
    } // Async !
 
    override def postStop (): Unit = synchronized {
-      if (logger.isDebugEnabled()) logger debug "{'subject': 'Socket.PostStop'}"
+
       Await.ready(bindingSt.unbind(), 3 seconds)
-      if (logger.isInfoEnabled()) logger info "{'subject': 'Socket.Unbound'}"
+      if (logger.isDebugEnabled()) logger debug s"""{"subject": "${loggerName}.postStop"}"""
    }
 
 }
 
 private[implv1] object SocketManager {
    def props (
-      config: TCPConfigForServer,
-      connectionManager: ActorRef,
-      requestFlow: Flow[ByteString, ByteString, ActorRef],
-      logger: Logger
+       name: String,
+       config: TCPConfigForServer,
+       connectionManager: ActorRef,
+       requestFlow: Flow[ByteString, ByteString, ActorRef]
    ) = Props {
-      new SocketManager(config, connectionManager, requestFlow, logger)
+      new SocketManager(name, config, connectionManager, requestFlow)
    }
 }

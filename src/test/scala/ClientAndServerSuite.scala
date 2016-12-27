@@ -133,7 +133,7 @@ class ClientAndServerSuite
    val res = for {
       server <-
       TCPServer(
-         "echochat-server",
+         "echosrv",
          tcpServer, stream, true
       )(service)
       client <-
@@ -142,8 +142,7 @@ class ClientAndServerSuite
          tcpClient,
          stream,
          TextFrame.writer,
-         TextFrame.reader,
-         true
+         TextFrame.reader
       )
    } yield (server, client)
 

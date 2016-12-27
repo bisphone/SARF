@@ -66,11 +66,11 @@ object ClientFlow {
             // Add len-field to the header
             ByteString.newBuilder.putInt(Constant.lenOfLenField + bytes.size)(byteOrder.javaValue).append(bytes).result()
          }
-         if (sureDebug) tmp.map(debugFn("BytesOutputStream")) else tmp
+         if (sureDebug) tmp.map(debugFn(s"SARFClient(${name}).BytesOutputStream")) else tmp
       }
       val slices = {
          val tmp = Flow.fromGraph(slicer(name, byteOrder, maxSliceSize))
-         if (sureDebug) tmp.map(debugFn("BytesInputStream")) else tmp
+         if (sureDebug) tmp.map(debugFn(s"SARFClient(${name}).BytesInputStream")) else tmp
       }.map(_.drop(Constant.lenOfLenField)) // Remove len-filed from stream
 
       val sink = slices.toMat(Sink.actorSubscriber[ByteString](consumer))(Keep.right)

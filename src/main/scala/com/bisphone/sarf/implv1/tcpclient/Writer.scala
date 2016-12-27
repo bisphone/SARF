@@ -23,7 +23,7 @@ class Writer (name: String, director: ActorRef) extends ActorPublisher[ByteStrin
 
       if (logger isDebugEnabled ()) logger debug
           s"""{
-             |"subject":      "preStart",
+             |"subject":      "${loggerName}.preStart",
              |"actor":        "${self}",
              |"director":     "${director}"
              |}""".stripMargin
@@ -33,7 +33,7 @@ class Writer (name: String, director: ActorRef) extends ActorPublisher[ByteStrin
 
       if (logger isDebugEnabled ()) logger debug
           s"""{
-             |"subject":      "postStop",
+             |"subject":      "${loggerName}.postStop",
              |"actor":        "${self}",
              |"director":     "${director}"
              |}""".stripMargin
@@ -58,7 +58,7 @@ class Writer (name: String, director: ActorRef) extends ActorPublisher[ByteStrin
 
          if (logger isWarnEnabled ()) logger warn
              s"""{
-                |"subject":      "Stream Has Canceled => Stop",
+                |"subject":      "${loggerName}.StreamHasCanceled => Stop",
                 |"actor":        "${self}",
                 |"director":     "${director}"
                 |}""".stripMargin
@@ -69,7 +69,7 @@ class Writer (name: String, director: ActorRef) extends ActorPublisher[ByteStrin
 
          if (logger isWarnEnabled ()) logger warn
              s"""{
-                |"subject":      "Director Has Terminated => Stop",
+                |"subject":      "${loggerName}.DirectorHasTerminated => Stop",
                 |"actor":        "${self}",
                 |"director":     "${director}"
                 |}""".stripMargin

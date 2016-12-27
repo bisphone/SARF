@@ -21,7 +21,7 @@ class Reader (name: String, director: ActorRef, demands: Int) extends ActorSubsc
       request(demands)
       if (logger isDebugEnabled ()) logger debug
           s"""{
-             |"subject":     "preStart",
+             |"subject":     "${loggerName}.preStart",
              |"actor":       "${self}",
              |"director":    "${director}",
              |"deamnds":     ${demands}
@@ -31,7 +31,7 @@ class Reader (name: String, director: ActorRef, demands: Int) extends ActorSubsc
    override def postStop(): Unit = {
       if (logger isDebugEnabled ()) logger debug
           s"""{
-             |"subject":      "postStop",
+             |"subject":      "${loggerName}.postStop",
              |"actor":        "${self}",
              |"director":     "${director}"
              |}""".stripMargin
@@ -48,7 +48,7 @@ class Reader (name: String, director: ActorRef, demands: Int) extends ActorSubsc
 
          if (logger isWarnEnabled()) logger warn
              s"""{
-                |"subject":   "Stream Has Completed => Stop",
+                |"subject":   "${loggerName}.StreamHasCompleted => Stop",
                 |"actor":     "${self}"
                 |}""".stripMargin
 
@@ -58,7 +58,7 @@ class Reader (name: String, director: ActorRef, demands: Int) extends ActorSubsc
 
          if (logger isErrorEnabled()) logger error (
              s"""{
-                |"subject":   "Stream Has Failed => Stop",
+                |"subject":   "${loggerName}.StreamHasFailed => Stop",
                 |"actor":     "${self}",
                 |"errorType": "${cause.getClass.getName}",
                 |"errorMsg":  "${cause.getMessage}"
@@ -72,7 +72,7 @@ class Reader (name: String, director: ActorRef, demands: Int) extends ActorSubsc
 
          if (logger isWarnEnabled()) logger warn
              s"""{
-                |"subject":   "Director Has Terminated => Stop",
+                |"subject":   "${loggerName}.DirectorHasTerminated => Stop",
                 |"actor":     "${self}",
                 |"director":  "${director}"
                 |}""".stripMargin
