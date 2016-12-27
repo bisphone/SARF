@@ -138,7 +138,7 @@ class ClientAndServerSuite
       )(service)
       client <-
       TCPClient[TextFrame.Tracked, TextFrame.Untracked](
-         "echochat-client",
+         "echochat",
          tcpClient,
          stream,
          TextFrame.writer,

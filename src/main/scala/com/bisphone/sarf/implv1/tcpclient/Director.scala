@@ -143,7 +143,8 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
    implicit val mat = ActorMaterializer()(context.system)
 
-   val logger = LoggerFactory getLogger name
+   val loggerName = s"SARFClient(${name}).Director"
+   val logger = LoggerFactory getLogger loggerName
 
    val tracker = new Director.Tracker
 
@@ -159,21 +160,23 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
       // case frm: Command.Send[_] =>
       // logger warn """{'subject': 'Director(connecting).Send => Can\'tSend'}"""
       case Command.Send(rq: UFr) if uf$tag.unapply(rq).isDefined /* check type erasaure */ =>
-         logger warn
+
+         if (logger isWarnEnabled ) logger warn
             s"""{
-                |'subject': 'Director(connecting).Send => Can\'tSend',
-                |'untracked-dispatchkey': ${rq.dispatchKey}
+                |"subject":               "Connecting.Send => Can't Send",
+                |"untrackedDispatchKey":  ${rq.dispatchKey}
                 |}""".stripMargin
+
          sender ! Director.Event.CantSend
 
       case ev: Event.Connected =>
 
-         logger info
+         if (logger isWarnEnabled ()) logger warn
             s"""{
-                |'subject': 'Director(connecting).Connected'
-                |'publisher': '${ev.publisher}',
-                |'consumer': '${ev.consumer}',
-                |'connection': '${ev.conn}',
+                |"subject":      "Connecting => Connected",
+                |"publisher":    "${ev.publisher}",
+                |"consumer":     "${ev.consumer}",
+                |"connection":   "${ev.conn}"
                 |}""".stripMargin
 
          context watch ev.publisher
@@ -181,22 +184,27 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
          context become connected(ev)
 
       case Event.Expired(_) =>
-         logger warn
+
+         if (logger isWarnEnabled ()) logger warn
             s"""{
-                |'subject': 'Director(connecting).Expired => Stop',
-                |'tcpConfig': '$tcp'
+                |"subject":      "Connecting.Expired => Stop",
+                |"tcpConfig":    "$tcp"
                 |}""".stripMargin
+
          context stop self
 
       case Event.Failed(cause) =>
-         logger error(
+
+         if (logger isErrorEnabled ()) logger error(
             s"""{
-                |'subject': 'Director(connecting).Failed => Stop',
-                |'tcpConfig': '$tcp'
+                |"subject":      "Connecting.Failed => Stop",
+                |"tcpConfig":    "$tcp"
                 |}""".stripMargin, cause.orNull
             )
+
          context stop self
 
+      // Unused! and Depricated!
       case Echo(value) => sender ! value
    }
 
@@ -213,41 +221,46 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
          if (logger.isDebugEnabled()) logger debug
             s"""{
-                |'subject': 'Director(connected).Send',
-                |'dispatchKey': ${frame.dispatchKey},
-                |'trackingCode': $tk,
-                |'bytes': '${frame.bytes.size}'
+                |"subject":      "Connected.Send => Sending",
+                |"dispatchKey":  ${frame.dispatchKey},
+                |"trackingCode": $tk,
+                |"bytes":        "${frame.bytes.size}"
                 |}""".stripMargin
 
       case Event.Received(bytes: ByteString) =>
 
 
-
          val frame = reader.readFrame(bytes)
+
          tracker.resolve(frame.trackingKey) match {
             case Some(requestor) =>
+
                if (logger.isDebugEnabled()) logger debug
                   s"""{
-                      |'subject': 'Director(connected).Received',
-                      |'responseKey': ${frame.dispatchKey},
-                      |'trackingCode': ${frame.trackingKey},
-                      |'bytes': ${frame.bytes.size}
+                      |"subject":         "Connected.Received => Deliver",
+                      |"responseKey":     ${frame.dispatchKey},
+                      |"trackingCode":    ${frame.trackingKey},
+                      |"bytes":           ${frame.bytes.size}
                       |}""".stripMargin
+
                requestor ! Event.Received[Fr](frame)
+
             case None =>
+
                if (logger.isErrorEnabled()) logger error
                   s"""{
-                      |'subject': 'Director(connected).Received/Unrequested Response!',
-                      |'responseKey': ${frame.dispatchKey},
-                      |'trackingCode': ${frame.trackingKey},
-                      |'bytes': ${frame.bytes.size}
+                      |"subject":      "Connected.Received => throw UnrequestedResponse!",
+                      |"responseKey":  ${frame.dispatchKey},
+                      |"trackingCode": ${frame.trackingKey},
+                      |"bytes":        ${frame.bytes.size}
                       |}""".stripMargin
+
                throw new Director.UnrequestedResponse[Fr](frame, s"Unrequested Response trackingKey: ${frame.trackingKey}")
          }
 
       case Command.Disconnect =>
 
-         logger info "{'subject': 'Director(connected).Disconnect'}"
+         if (logger isInfoEnabled ()) logger info """{"subject": "Connected.Disconnect"}"""
 
          ev.publisher ! PoisonPill
 
@@ -257,13 +270,14 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       case Terminated(ref) =>
 
-         logger warn
+         if (logger isWarnEnabled ()) logger warn
             s"""{
-                |'subject': 'Director(connected).TerminatedWorker => Director.IOException',
-                |'actor': '$ref'
+                |"subject":      "Connected.TerminatedWorker => IOException",
+                |"actor":        "${self},
+                |"worker":       "${ref}"
                 |}""".stripMargin
 
-         throw new Director.IOException(s"the $ref has been terminated!")
+         throw new Director.IOException(s"the ${ref} has been terminated!")
 
       case Echo(value) => sender ! value
    }
@@ -272,16 +286,17 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       case Command.Disconnect =>
 
-         if (logger.isErrorEnabled()) logger debug "{'subject': 'Director(disconnecting).Disconnect'}"
+         if (logger.isDebugEnabled()) logger debug """{"subject": "Disconnecting.Disconnect => Nothing"}"""
 
          disconnectRequesters += sender()
 
       case Terminated(ref) =>
 
-         logger info
+         if (logger isWarnEnabled  ()) logger warn
             s"""{
-                |'subject': 'Director(connected).Terminated',
-                |'actor': '$ref'
+                |"subject":   "Disconnecting.TerminateWorder => Stop",
+                |"actor":     "${self}",
+                |"worker":    "${ref}"
                 |}""".stripMargin
 
          disconnectRequesters.foreach {
@@ -292,7 +307,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
       case Event.Expired(_) =>
 
-         logger info "{'subject': 'Director(connected).Expired'}"
+         if (logger isWarnEnabled ()) logger warn """{"subject": "Disconnecting.Expired => Stop"}"""
 
          disconnectRequesters.foreach {
             _ ! unit
@@ -305,8 +320,16 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
    override def preStart (): Unit = {
 
-      val publisher: Props = Writer.props(self)
-      val consumer: Props = Reader.props(self)
+      if (logger isWarnEnabled ()) logger warn
+          s"""{
+             |"subject":      "preStart",
+             |"actor":        "${self}",
+             |"state":        "${state}",
+             |"tracker":      "${tracker}",
+             |}""".stripMargin
+
+      val publisher: Props = Writer.props(name, self)
+      val consumer: Props = Reader.props(name, self)
 
       val flow: Flow[ByteString, ByteString, (ActorRef, ActorRef)] =
          ClientFlow(
@@ -329,12 +352,13 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
    }
 
    override def postStop (): Unit = {
-      logger warn
+
+      if (logger isWarnEnabled ()) logger warn
          s"""{
-             | 'subject': 'Director(?).PostStop',
-             | 'ref': '${self}',
-             | 'state': '${state}',
-             | 'tracker': ${tracker},
+             |"subject":      "postStop",
+             |"actor":        "${self}",
+             |"state":        "${state}",
+             |"tracker":      "${tracker}",
              |}""".stripMargin
    }
 
