@@ -75,6 +75,22 @@ object Service {
          this
       }
 
+      def serve[Out, Err, Fn <: Func[Err, Out]](
+          fn: FuncImpl[Fn, Err, Out]
+      )(
+          implicit
+          fnKey: TypeKey[Fn],
+          fnReader: Reader[Fn, Fr],
+          errKey: TypeKey[Err],
+          errWriter: Writer[Err, Fr, UFr],
+          outKey: TypeKey[Out],
+          outWriter: Writer[Out, Fr, UFr],
+          statTag: StatTag[Fn] = StatTag.nothing
+      ): Builder[Fr, UFr] = {
+         fnlist += Fn[Fn, Out, Err, Fr, UFr](fn, fnKey, outKey, errKey, fnReader, outWriter, errWriter, statTag)
+         this
+      }
+
       def result: StdTry[Service[Fr, UFr]] = Try {
 
          if (fnlist.size < 1)

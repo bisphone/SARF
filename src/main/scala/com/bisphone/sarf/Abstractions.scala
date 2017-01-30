@@ -197,6 +197,8 @@ object StatTag {
    private class FreeStatTag (override val tag: String) extends StatTag[Nothing]
 
    def apply[T] (tag: String): StatTag[T] = new FreeStatTag(tag).asInstanceOf[StatTag[T]]
+
+   def nothing[T] = apply[T]("nothing")
 }
 
 trait StatCollector {
