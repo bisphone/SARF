@@ -5,6 +5,7 @@ import com.bisphone.util._
 import com.bisphone.std._
 import akka.util.ByteString
 
+import scala.annotation.implicitNotFound
 import scala.concurrent.duration.FiniteDuration
 import scala.concurrent.{ExecutionContextExecutor, Future}
 import scala.reflect.ClassTag
@@ -36,6 +37,11 @@ object IOCommand {
 
 // ========================================================================
 
+@implicitNotFound(
+    """
+      | Couldn't find implicit value for TypeKey[${T}];
+      | May be you are writing unmatched value for 'Err' or 'Out' in 'Func[Err,Out]'
+    """)
 trait TypeKey[T] extends Serializable {
 
    def typeKey: Int
@@ -87,7 +93,11 @@ trait Reader[T, Fr <: TrackedFrame] {
    def read (t: Fr): T
 }
 
-trait Func[Err, Out]
+trait Func[E,R] {
+   type Error = E
+   type Result = R
+   type Out = AsyncResult[Error, Result]
+}
 
 trait FuncImpl[In, Err, Out] extends (In => AsyncResult[Err, Out])
 
