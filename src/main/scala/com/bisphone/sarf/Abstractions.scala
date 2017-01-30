@@ -87,6 +87,10 @@ trait Reader[T, Fr <: TrackedFrame] {
    def read (t: Fr): T
 }
 
+trait Func[Err, Out]
+
+trait FuncImpl[In, Err, Out] extends (In => AsyncResult[Err, Out])
+
 // ========================================================================
 
 sealed class SARFException (
@@ -164,6 +168,18 @@ trait TCPClientRef[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
       rsTC.reader,
       erTC.reader
    )
+
+   def apply[Err, Out, Fn <: Func[Err, Out]](
+       fn: Fn
+   )(
+       implicit
+       fnKey: TypeKey[Fn],
+       fnWriter: Writer[Fn, Fr, UFr],
+       errKey: TypeKey[Err],
+       errReader: Reader[Err, Fr],
+       outKey: TypeKey[Out],
+       outReader: Reader[Out, Fr]
+   ) = call(fn)(fnKey, outKey, errKey, fnWriter, outReader, errReader)
 
 }
 
