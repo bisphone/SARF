@@ -1,6 +1,7 @@
 package com.bisphone.sarf
 
 import akka.actor.UntypedActor
+import akka.event.Logging.Error
 import com.bisphone.util._
 import com.bisphone.std._
 import akka.util.ByteString
@@ -93,13 +94,20 @@ trait Reader[T, Fr <: TrackedFrame] {
    def read (t: Fr): T
 }
 
-trait Func[E,R] {
-   type Error = E
-   type Result = R
-   type Out = AsyncResult[Error, Result]
+trait Func{
+   type Error
+   type Result
 }
 
-trait FuncImpl[In, Err, Out] extends (In => AsyncResult[Err, Out])
+object Func {
+
+   type Impl[T <: Func] = T => AsyncResult[T#Error, T#Result]
+
+   def apply[T <: Func]( fn : T => AsyncResult[T#Error, T#Result]):Impl[T]  = fn
+}
+
+
+
 
 // ========================================================================
 
@@ -179,16 +187,16 @@ trait TCPClientRef[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] {
       erTC.reader
    )
 
-   def apply[Err, Out, Fn <: Func[Err, Out]](
+   def apply[Fn <: Func](
        fn: Fn
    )(
        implicit
        fnKey: TypeKey[Fn],
        fnWriter: Writer[Fn, Fr, UFr],
-       errKey: TypeKey[Err],
-       errReader: Reader[Err, Fr],
-       outKey: TypeKey[Out],
-       outReader: Reader[Out, Fr]
+       errKey: TypeKey[Fn#Error],
+       errReader: Reader[Fn#Error, Fr],
+       outKey: TypeKey[Fn#Result],
+       outReader: Reader[Fn#Result, Fr]
    ) = call(fn)(fnKey, outKey, errKey, fnWriter, outReader, errReader)
 
 }

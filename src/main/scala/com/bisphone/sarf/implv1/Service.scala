@@ -75,19 +75,19 @@ object Service {
          this
       }
 
-      def serveFunc[Out, Err, Fn <: Func[Err, Out]](
+      def serveFunc[Fn <: Func](
       // def serveFunc[Out, Err, Fn <: Func[_ <: Err, _ <: Out]](
-          fn: Fn => AsyncResult[Err, Out] // fn: FuncImpl[Fn, Err, Out]
+          fn: Fn => AsyncResult[Fn#Error, Fn#Result] // fn: FuncImpl[Fn, Err, Out]
       )(
           implicit
           fnKey: TypeKey[Fn],
           fnReader: Reader[Fn, Fr],
-          errKey: TypeKey[Err],
-          errWriter: Writer[Err, Fr, UFr],
-          outKey: TypeKey[Out],
-          outWriter: Writer[Out, Fr, UFr]
+          errKey: TypeKey[Fn#Error],
+          errWriter: Writer[Fn#Error, Fr, UFr],
+          outKey: TypeKey[Fn#Result],
+          outWriter: Writer[Fn#Result, Fr, UFr]
       ): Builder[Fr, UFr] = {
-         fnlist += Fn[Fn, Out, Err, Fr, UFr](
+         fnlist += Fn[Fn, Fn#Result, Fn#Error, Fr, UFr](
             fn, fnKey, outKey, errKey,
             fnReader, outWriter, errWriter,
             StatTag.nothing

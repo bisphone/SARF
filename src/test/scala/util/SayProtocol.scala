@@ -9,7 +9,7 @@ import com.bisphone.util.ByteOrder
 /**
   * @author Reza Samei <reza.samei.g@gmail.com>
   */
-object SayProtocol {
+object SayProtocol { self =>
 
     val order = ByteOrder.BigEndian
     implicit val javaValueForByteOrder = order.javaValue
@@ -94,7 +94,10 @@ object SayProtocol {
         Bye(new String(frame.content.toArray))
     }
 
-    case class SayHello(to: String) extends Func[Error, Hello]
+    case class SayHello(to: String) extends Func {
+        override type Error = self.Error
+        override type Result = Hello
+    }
 
     implicit val sayHelloKey = TypeKey[SayHello](4)
 
@@ -106,7 +109,10 @@ object SayProtocol {
         SayHello(new String(frame.content.toArray))
     }
 
-    case class SayBye(to: String) extends Func[Error, Bye]
+    case class SayBye(to: String) extends Func {
+        override type Error = self.Error
+        override type Result = Bye
+    }
 
     implicit val sayByeKey = TypeKey[SayBye](5)
 
