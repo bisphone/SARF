@@ -25,7 +25,7 @@ libraryDependencies ++= Seq(
 
 libraryDependencies ++= Seq(
    "org.scalatest" %% "scalatest" % "2.2.6" % Test,
-   "com.bisphone" %% "testkit" % "0.3.0" % Test,
+   "com.bisphone" %% "testkit" % "0.4.0" % Test,
    akka("akka-testkit") % Test,
    akka("akka-stream-testkit") % Test
 )
