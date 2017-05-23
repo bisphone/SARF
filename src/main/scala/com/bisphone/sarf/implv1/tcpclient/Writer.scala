@@ -12,75 +12,75 @@ import scala.collection.mutable
   */
 class Writer (name: String, director: ActorRef) extends ActorPublisher[ByteString] {
 
-   val loggerName = s"SARFClient(${name}).Writer"
-   val logger = LoggerFactory getLogger loggerName
+    val loggerName = s"SARFClient(${name}).Writer"
+    val logger = LoggerFactory getLogger loggerName
 
-   import ActorPublisherMessage._
+    import ActorPublisherMessage._
 
-   override def preStart (): Unit = {
+    override def preStart (): Unit = {
 
-      context watch director
+        context watch director
 
-      if (logger isDebugEnabled ()) logger debug
-          s"""{
-             |"subject":      "${loggerName}.preStart",
-             |"actor":        "${self}",
-             |"director":     "${director}"
-             |}""".stripMargin
-   }
+        if (logger isDebugEnabled()) logger debug
+            s"""{
+               |"subject":      "${loggerName}.preStart",
+               |"actor":        "${self}",
+               |"director":     "${director}"
+               |}""".stripMargin
+    }
 
-   override def postStop(): Unit = {
+    override def postStop (): Unit = {
 
-      if (logger isDebugEnabled ()) logger debug
-          s"""{
-             |"subject":      "${loggerName}.postStop",
-             |"actor":        "${self}",
-             |"director":     "${director}"
-             |}""".stripMargin
+        if (logger isDebugEnabled()) logger debug
+            s"""{
+               |"subject":      "${loggerName}.postStop",
+               |"actor":        "${self}",
+               |"director":     "${director}"
+               |}""".stripMargin
 
-   }
+    }
 
-   val queue = mutable.Queue.empty[ByteString]
+    val queue = mutable.Queue.empty[ByteString]
 
-   def deliver (): Unit =
-      while (totalDemand > 0 && queue.nonEmpty)
-         onNext(queue.dequeue())
+    def deliver (): Unit =
+        while (totalDemand > 0 && queue.nonEmpty)
+            onNext(queue.dequeue())
 
-   def send (request: ByteString) = {
-      queue enqueue request
-      deliver()
-   }
+    def send (request: ByteString) = {
+        queue enqueue request
+        deliver()
+    }
 
-   def receive: Receive = {
-      case request: ByteString => send(request)
-      case Request(n) => deliver()
-      case Cancel =>
+    def receive: Receive = {
+        case request: ByteString => send(request)
+        case Request(n) => deliver()
+        case Cancel =>
 
-         if (logger isWarnEnabled ()) logger warn
-             s"""{
-                |"subject":      "${loggerName}.StreamHasCanceled => Stop",
-                |"actor":        "${self}",
-                |"director":     "${director}"
-                |}""".stripMargin
+            if (logger isWarnEnabled()) logger warn
+                s"""{
+                   |"subject":      "${loggerName}.StreamHasCanceled => Stop",
+                   |"actor":        "${self}",
+                   |"director":     "${director}"
+                   |}""".stripMargin
 
-         context stop self
+            context stop self
 
-      case Terminated(ref /* director */) =>
+        case Terminated(ref /* director */) =>
 
-         if (logger isWarnEnabled ()) logger warn
-             s"""{
-                |"subject":      "${loggerName}.DirectorHasTerminated => Stop",
-                |"actor":        "${self}",
-                |"director":     "${director}"
-                |}""".stripMargin
+            if (logger isWarnEnabled()) logger warn
+                s"""{
+                   |"subject":      "${loggerName}.DirectorHasTerminated => Stop",
+                   |"actor":        "${self}",
+                   |"director":     "${director}"
+                   |}""".stripMargin
 
-         context stop self
-   }
+            context stop self
+    }
 
 }
 
 object Writer {
-   def props (name: String, director: ActorRef) = Props {
-      new Writer(name, director)
-   }
+    def props (name: String, director: ActorRef) = Props {
+        new Writer(name, director)
+    }
 }

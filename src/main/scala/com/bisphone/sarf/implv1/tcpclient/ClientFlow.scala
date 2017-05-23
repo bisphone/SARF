@@ -16,66 +16,41 @@ import org.slf4j.Logger
   */
 object ClientFlow {
 
-   private def slicer (
-      name: String,
-      byteOrder: ByteOrder,
-      maxSize: Int
-   ): GraphStage[FlowShape[ByteString, ByteString]] =
-      ByteStreamSlicer(name, Constant.lenOfLenField, maxSize, byteOrder)
+    private def slicer (
+        name: String,
+        byteOrder: ByteOrder,
+        maxSize: Int
+    ): GraphStage[FlowShape[ByteString, ByteString]] =
+        ByteStreamSlicer(name, Constant.lenOfLenField, maxSize, byteOrder)
 
-   def apply (
-      name: String,
-      conf: StreamConfig,
-      publisher: Props,
-      consumer: Props,
-      logger: Logger,
-      debug: Boolean
-   ): Flow[ByteString, ByteString, (ActorRef, ActorRef)] = {
+    def apply (
+        name: String,
+        conf: StreamConfig,
+        publisher: Props,
+        consumer: Props,
+        logger: Logger,
+        debug: Boolean
+    ): Flow[ByteString, ByteString, (ActorRef, ActorRef)] = {
 
-      val maxSliceSize = conf.maxSliceSize
-      val byteOrder = conf.byteOrder
+        val maxSliceSize = conf.maxSliceSize
+        val byteOrder = conf.byteOrder
 
-      val sureDebug = debug && logger.isDebugEnabled
-
-      def str (bytes: ByteString): String = {
-         val arr = bytes.toArray
-         val iter = arr.iterator
-
-         if (arr.size > 1) {
-            val buf = new StringBuilder
-            buf.append(iter.next() & 0xFF)
-            while (iter.hasNext) {
-               buf.append(", ").append(iter.next() & 0xFF)
+        val source = {
+            val tmp = Source.actorPublisher[ByteString](publisher).map { bytes =>
+                // Constant.lenOfLenField is 4
+                // Add len-field to the header
+                ByteString.newBuilder.putInt(Constant.lenOfLenField + bytes.size)(byteOrder.javaValue).append(bytes).result()
             }
-            buf.toString()
-         } else if (arr.size == 1) (iter.next() & 0xFF).toString else ""
-      }
 
-      def debugFn (subject: String): ByteString => ByteString = bytes => {
-         logger debug
-            s"""{
-                |'subject': '${subject}',
-                |'bytes': [${str(bytes)}]
-                |}""".stripMargin
-         bytes
-      }
+            tmp
+        }
+        val slices = {
+            Flow.fromGraph(slicer(name, byteOrder, maxSliceSize))
+        }.map(_.drop(Constant.lenOfLenField)) // Remove len-filed from stream
 
-      val source = {
-         val tmp = Source.actorPublisher[ByteString](publisher).map { bytes =>
-            // Constant.lenOfLenField is 4
-            // Add len-field to the header
-            ByteString.newBuilder.putInt(Constant.lenOfLenField + bytes.size)(byteOrder.javaValue).append(bytes).result()
-         }
-         if (sureDebug) tmp.map(debugFn(s"SARFClient(${name}).BytesOutputStream")) else tmp
-      }
-      val slices = {
-         val tmp = Flow.fromGraph(slicer(name, byteOrder, maxSliceSize))
-         if (sureDebug) tmp.map(debugFn(s"SARFClient(${name}).BytesInputStream")) else tmp
-      }.map(_.drop(Constant.lenOfLenField)) // Remove len-filed from stream
+        val sink = slices.toMat(Sink.actorSubscriber[ByteString](consumer))(Keep.right)
 
-      val sink = slices.toMat(Sink.actorSubscriber[ByteString](consumer))(Keep.right)
-
-      Flow.fromSinkAndSourceMat(sink, source)(Keep.both)
-   }
+        Flow.fromSinkAndSourceMat(sink, source)(Keep.both)
+    }
 
 }
