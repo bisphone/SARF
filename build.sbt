@@ -4,7 +4,7 @@ organization := "com.bisphone"
 
 name := "sarf" // Simple Abstraction for Remote Function
 
-version := "0.7.1"
+version := "0.7.2"
 
 scalaVersion := "2.11.11"
 

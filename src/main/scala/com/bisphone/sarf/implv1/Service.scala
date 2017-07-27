@@ -45,6 +45,8 @@ object Service {
             }
          }(ec)
       }
+
+      override def toString = s"Fn(${rqKey.typeKey}/${rsKey.typeKey}/${erKey.typeKey})"
    }
 
    class Builder[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
@@ -61,6 +63,8 @@ object Service {
 
       private val fnlist = scala.collection.mutable.ListBuffer.empty[Service.Fn[_, _, _, Fr, UFr]]
 
+      private val logger = LoggerFactory getLogger classOf[Builder[_,_]]
+
       def serve[Rq, Rs, Er] (fn: Rq => AsyncResult[Er, Rs])(
          implicit
          rqKey: TypeKey[Rq],
@@ -71,7 +75,13 @@ object Service {
          erWriter: Writer[Er, Fr, UFr],
          statTag: StatTag[Rq]
       ): Builder[Fr, UFr] = {
-         fnlist += Fn[Rq, Rs, Er, Fr, UFr](fn, rqKey, rsKey, erKey, rqReader, rsWriter, erWriter, statTag)
+         val tmp = Fn[Rq, Rs, Er, Fr, UFr](fn, rqKey, rsKey, erKey, rqReader, rsWriter, erWriter, statTag)
+         val similarFn = fnlist.find( i => tmp.rqKey.typeKey == rqKey.typeKey)
+         if (similarFn.isDefined) {
+            logger.error(s"Similar Functions: ${similarFn.get} / ${tmp}")
+            throw new RuntimeException(s"Similar Function: ${tmp} vs. ${similarFn.get}")
+         } else fnlist += tmp
+         if (logger.isDebugEnabled()) logger.debug(s"Serve, ${tmp}")
          this
       }
 
@@ -103,15 +113,19 @@ object Service {
          val fns = fnlist.map(i => i.rqKey.typeKey -> i).toMap[Int, Fn[_, _, _, Fr, UFr]]
 
          if (fns.size != fnlist.size)
-            throw new RuntimeException("Invalid Functions: Some functions has the same input-signature")
+            throw new RuntimeException(s"Invalid Functions: Some functions has the same input-signature: ${fnlist}")
 
-         new Service[Fr, UFr](
+         val srv = new Service[Fr, UFr](
             executor,
             failureHandler,
             frameReader, frameWriter,
             fns,
             statCollector
          )
+
+         if (logger.isInfoEnabled()) logger.info(s"Done, ${fns}")
+
+         srv
       }
 
 
