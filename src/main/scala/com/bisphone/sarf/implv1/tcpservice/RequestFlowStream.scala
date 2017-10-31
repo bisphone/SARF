@@ -54,11 +54,7 @@ private[implv1] object RequestFlowStream {
             buf.toString()
          } else if (arr.size == 1) (iter.next() & 0xFF).toString else ""
 
-         logger debug
-            s"""{
-                |"subject":      "${subject}",
-                |"bytes":        [${str}]
-                |}""".stripMargin
+         logger trace s"${subject}, Bytes ${str}"
 
          bytes
       }
@@ -74,8 +70,8 @@ private[implv1] object RequestFlowStream {
          source ~> mergeStage
 
          val slicerStage: FlowShape[ByteString, ByteString] = {
-            val a = Flow[ByteString] via slicer(s"SARFServer(${name}).Slicer", byteOrder, maxSliceSize)
-            val b = if (sureDebug) a map logBytes(s"SARFServer(${name}).ByteInputStream") else a
+            val a = Flow[ByteString] via slicer(s"${name}", byteOrder, maxSliceSize)
+            val b = if (sureDebug) a map logBytes(s"${name}.sarf.server.ByteInputStream") else a
             builder add b
          }
 
@@ -86,7 +82,7 @@ private[implv1] object RequestFlowStream {
          // IOCommandTransformer will add len-field when it's needed
          val merged = mergeStage.out.via(new IOCommandTransformer(name, conf.byteOrder, debug, logger))
 
-         val result = if (sureDebug) merged map logBytes(s"SARFServer(${name}).ByteOutputStream") else merged
+         val result = if (sureDebug) merged map logBytes(s"${name}.sarf.server.ByteOutputStream") else merged
 
          FlowShape(slicerStage.in, result.outlet)
       }

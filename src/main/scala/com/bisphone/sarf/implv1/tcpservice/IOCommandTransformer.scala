@@ -12,10 +12,10 @@ import org.slf4j.{Logger, LoggerFactory}
   */
 
 private[implv1] class IOCommandTransformer (
-    name: String,
-    byteOrder: ByteOrder,
-    debug: Boolean,
-    logger: Logger
+    name          : String,
+    byteOrder     : ByteOrder,
+    debug         : Boolean,
+    injectedLogger: Logger
 ) extends GraphStage[FlowShape[IOCommand, ByteString]] {
 
     implicit val order = byteOrder.javaValue
@@ -23,9 +23,13 @@ private[implv1] class IOCommandTransformer (
     val in = Inlet[IOCommand](s"CommandTransformer(${name}).in")
     val out = Outlet[ByteString](s"CommandTransformer(${name}).out")
 
-    val sureDebug = debug && logger.isDebugEnabled()
+    val sureDebug = debug && injectedLogger.isDebugEnabled()
 
     override val shape = FlowShape(in, out)
+
+    val loggerName = s"$name.sarf.server.io-commander"
+    injectedLogger warn s"SEE '${loggerName}'"
+    private val logger = LoggerFactory getLogger loggerName
 
     override def createLogic (inheritedAttrs: Attributes): GraphStageLogic = if (sureDebug) prodStage else debugStage
 
@@ -65,17 +69,17 @@ private[implv1] class IOCommandTransformer (
             val a = grab(in)
             a match {
                 case IOCommand.Send(bytes) =>
-                    if (sureDebug) logger debug s"{'subject': 'CommandTransformer.SEND(${bytes.size} + ${Constant.lenOfLenField} byets)'}"
+                    if (sureDebug) injectedLogger debug s"SEND, Bytes: ${bytes.size} + ${Constant.lenOfLenField}"
                     push(out, addSize(bytes))
                 case IOCommand.Close =>
-                    if (sureDebug) logger debug s"{'subject': 'CommandTransformer.CLOSED'}"
+                    if (sureDebug) injectedLogger debug s"CLOSE"
                     completeStage()
                 case IOCommand.SendAndClose(bytes) =>
                     push(out, addSize(bytes))
-                    if (sureDebug) logger debug s"{'subject': 'CommandTransformer.SEND(${bytes.size} + ${Constant.lenOfLenField} byets)&CLOSE'}"
+                    if (sureDebug) injectedLogger debug s"SEND & CLOSE, Bytes: ${bytes.size} + ${Constant.lenOfLenField}"
                     completeStage()
                 case IOCommand.KeepGoing =>
-                    if (sureDebug) logger debug s"{'subject': 'CommandTransformer.KEEPGOING'}"
+                    if (sureDebug) injectedLogger debug s"KEEPGOING"
                     push(out, ByteString.empty)
             }
         }

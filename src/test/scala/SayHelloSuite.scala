@@ -3,19 +3,19 @@ import akka.actor.ActorSystem
 import akka.testkit.TestKit
 import akka.util.ByteString
 import com.bisphone.sarf._
-import com.bisphone.sarf.implv1.{Service, StatCollector, TCPClient, TCPServer}
-import com.bisphone.sarf.implv1.util.{StreamConfig, TCPConfigForClient, TCPConfigForServer}
-import com.bisphone.util.{AsyncResult, ByteOrder}
-import org.scalatest.{BeforeAndAfter, FlatSpecLike, Matchers}
+import com.bisphone.sarf.implv1.{ Service, StatCollector, TCPClient, TCPServer }
+import com.bisphone.sarf.implv1.util.{ StreamConfig, TCPConfigForClient, TCPConfigForServer }
+import com.bisphone.util.{ AsyncResult, ByteOrder }
+import org.scalatest.{ BeforeAndAfter, FlatSpecLike, Matchers }
 import org.scalatest.concurrent.ScalaFutures
 import org.slf4j.LoggerFactory
 import com.bisphone.std._
-import com.bisphone.testkit.BaseSuite
 import org.scalatest.concurrent.PatienceConfiguration.Timeout
-import org.scalatest.time.{Second, Span}
+import org.scalatest.time.{ Second, Span }
+import util.BaseSuite
 
 import scala.concurrent.duration._
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ Await, ExecutionContext, Future }
 import scala.util.control.NonFatal
 
 /**

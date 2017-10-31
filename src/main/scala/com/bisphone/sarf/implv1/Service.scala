@@ -46,7 +46,7 @@ object Service {
          }(ec)
       }
 
-      override def toString = s"Fn(${rqKey.typeKey}/${rsKey.typeKey}/${erKey.typeKey})"
+      override def toString = s"Fn(Rq:${rqKey.typeKey}, Rs:${rsKey.typeKey}, Er:${erKey.typeKey})"
    }
 
    class Builder[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
@@ -146,6 +146,7 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
    uf$tag: ClassTag[UFr]
 ) extends sarf.Service[Fr, UFr] {
 
+   private val logger = LoggerFactory getLogger classOf[Service[Fr, UFr]]
 
    protected def get (key: TypeKey[_]): Option[Service.Fn[_, _, _, Fr, UFr]] =
       handlers.get(key.typeKey).asInstanceOf[Option[Service.Fn[_, _, _, Fr, UFr]]]
@@ -180,17 +181,21 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
    protected def unsupported (frame: Fr) = {
       failureHandler(new UnsupporetdDispatchKey[Fr](
          frame,
-         s"Unsupported Dispatch Key: ${frame.dispatchKey} (by TrackingKey: ${frame.trackingKey})"
+         s"Unsupported TypeKey: ${frame.dispatchKey.typeKey} (by TrackingKey: ${frame.trackingKey})"
       ), frame.bytes)
    }
 
    def handle (bytes: ByteString): Future[IOCommand] = try {
 
 
+      if (logger.isTraceEnabled()) logger trace s"Handle, Bytes: ${bytes.size}"
+
       val frame = frameReader.readFrame(bytes)
+
       get(frame.dispatchKey) match {
          case Some(fn) =>
 
+            if (logger.isTraceEnabled()) logger trace s"Handle, TypeKey: ${frame.dispatchKey}, Function: ${fn}"
             if (statCollector.isDefined) {
                runWithStat(fn, frame, System.currentTimeMillis(), statCollector.get)
             } else run(fn, frame).recoverWith {
@@ -198,11 +203,13 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
             }(executor)
 
          case None =>
+            if (logger.isWarnEnabled()) logger warn s"Handle, Unsupported, TypeKey: ${frame.dispatchKey}"
             unsupported(frame)
       }
 
    } catch {
       case NonFatal(cause) =>
+         if (logger.isErrorEnabled()) logger error ("Handle, Failure", cause)
          // @todo: Collect Stats
          failureHandler(cause, bytes)
    }
