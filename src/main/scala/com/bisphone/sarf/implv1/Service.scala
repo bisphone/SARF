@@ -75,8 +75,19 @@ object Service {
          erWriter: Writer[Er, Fr, UFr],
          statTag: StatTag[Rq]
       ): Builder[Fr, UFr] = {
+
+
+
          val tmp = Fn[Rq, Rs, Er, Fr, UFr](fn, rqKey, rsKey, erKey, rqReader, rsWriter, erWriter, statTag)
-         val similarFn = fnlist.find( i => tmp.rqKey.typeKey == rqKey.typeKey)
+
+
+          if (logger.isTraceEnabled()) {
+              val stack = new Exception("")
+              stack.fillInStackTrace()
+              logger.trace(s"Add, $tmp", stack)
+          }
+
+         val similarFn = fnlist.find( i => tmp.rqKey.typeKey == i.rqKey.typeKey)
          if (similarFn.isDefined) {
             logger.error(s"Similar Functions: ${similarFn.get} / ${tmp}")
             throw new RuntimeException(s"Similar Function: ${tmp} vs. ${similarFn.get}")
