@@ -141,7 +141,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
     implicit val mat = ActorMaterializer()(context.system)
 
-    val loggerName = s"$name.sarf.client.director"
+    val loggerName = s"${name}.sarf.client.director"
     val logger = LoggerFactory getLogger loggerName
 
     val debug = logger.isDebugEnabled()
