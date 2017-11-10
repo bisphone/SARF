@@ -10,6 +10,7 @@ object Proxy {
 
     case class NewConnection(id: Int, name: String, desc: String, ref: ActorRef)
     case class Send[T <: TrackedFrame, U <: UntrackedFrame[T]](frame: U, requestTime: Long)
+    case class Recieved[T <: TrackedFrame](frame: T)
 
     def props[T <: TrackedFrame, U <: UntrackedFrame[T]](
         name: String,
@@ -56,7 +57,7 @@ class Proxy[T <: TrackedFrame, U <: UntrackedFrame[T]](
         case Connection.Recieved(frame) =>
             tracker.resolve(frame.trackingKey) match {
                 case Some(ctx) =>
-                    ctx.caller ! frame
+                    ctx.caller ! Proxy.Recieved(frame)
                 case None =>
                     logger error s"Unrequested Response, TrackingKey: ${frame.trackingKey}"
             }

@@ -2,12 +2,14 @@ package com.bisphone.sarf.implv2.tcpclient
 
 import scala.collection.mutable
 import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.reflect.ClassTag
+import scala.util.Try
 
-import akka.actor.{Actor, ActorRef, Terminated}
+import akka.actor.{Actor, ActorRef, Props, Terminated}
 import akka.stream.ActorMaterializer
 import com.bisphone.launcher.Module
 import com.bisphone.sarf.{FrameReader, FrameWriter, TrackedFrame, UntrackedFrame}
-import com.bisphone.sarf.implv2.tcpclient.Director.ConnectionRef
+import com.bisphone.std._
 
 object Director {
 
@@ -16,7 +18,9 @@ object Director {
         minumumAdorableConnections: Int,
         maximumTroubleTime: FiniteDuration,
         maxRetry: Int,
-        retryDelay: FiniteDuration
+        retryDelay: FiniteDuration,
+        initTimeout: FiniteDuration,
+        requestTimeout: FiniteDuration
     )
 
     case class ConnectionRef(
@@ -31,6 +35,19 @@ object Director {
         retryCount: Int
     )
 
+    def props[T <: TrackedFrame, U <: UntrackedFrame[T]](
+        name: String,
+        config: Director.Config,
+        writer: FrameWriter[T, U],
+        reader: FrameReader[T],
+        fnReady: StdTry[ActorRef] => Unit,
+        fnUnready: Unit => Unit
+    )(
+        implicit
+        $tracked: ClassTag[T],
+        $untracked: ClassTag[U]
+    ): Props = Props { new Director(name, config, writer, reader, fnReady, fnUnready) }
+
 }
 
 class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
@@ -38,13 +55,19 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
     config: Director.Config,
     writer: FrameWriter[T, U],
     reader: FrameReader[T],
-    fnReady: Unit => Unit,
+    fnReady: StdTry[ActorRef] => Unit,
     fnUnready: Unit => Unit
+)(
+    implicit
+    $tracked: ClassTag[T],
+    $untracked: ClassTag[U]
 ) extends Actor with Module {
+
+    override protected def logger = loadLogger
 
     val proxyName = s"${name}.proxy"
     val proxyProps = Proxy.props(proxyName, self, writer)
-    val proxy = context actorOf (proxy, proxyName)
+    val proxy = context actorOf (proxyProps, proxyName)
 
     var _count = 0
     def count() = {
@@ -92,7 +115,7 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
         context.system.scheduler.scheduleOnce(
             config.retryDelay,self,
             Director.RetryRef(tmp.config, retryCount)
-        )
+        )(context.dispatcher)
     }
 
     def setEstablishedConnection(ref: ActorRef, state: Connection.State.Established) = {
@@ -107,11 +130,11 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
 
     def normal: Receive = {
 
-        case Terminated(ref) if all(ref).isInstanceOf[Connection.State.Established] =>
+        case Terminated(ref) if all(ref).state.isInstanceOf[Connection.State.Established] =>
             _established -= 1
             scheduleForRenewing(ref)
 
-        case Terminated(ref) if all(ref) =>
+        case Terminated(ref) if all contains ref =>
             scheduleForRenewing(ref)
 
         case st: Connection.State.Established =>
@@ -122,10 +145,10 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
                 s"${tmp.config.tcp.host}:${tmp.config.tcp.port}",
                 tmp.state.ref
             )
-            
+
             if (_established >= config.minumumAdorableConnections && _calledFnReady) {
                 _calledFnReady = true
-                fnReady
+                fnReady(StdSuccess(proxy))
             }
 
         case Director.RetryRef(cfg, retryCount) =>
@@ -133,5 +156,4 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
     }
 
     override def receive: Receive = normal
-
 }

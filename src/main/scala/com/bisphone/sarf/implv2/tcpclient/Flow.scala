@@ -40,12 +40,12 @@ class Output[T <: TrackedFrame](
         private val messages = mutable.Queue[T]()
 
         setHandler(out, new OutHandler {
-            override def onPull(): Unit = push()
+            override def onPull(): Unit = pump()
         })
 
         logger debug s"New, Connection: ${connection}, Self: ${self.ref}"
 
-        private def push() = {
+        private def pump() = {
             if (isAvailable(out) && messages.nonEmpty) {
                 push(out, messages.dequeue.bytes)
             }
@@ -67,7 +67,7 @@ class Output[T <: TrackedFrame](
         private def onMessage(x: (ActorRef, Any)): Unit = x match {
             case (`connection`, msg: T) =>
                 messages enqueue msg
-                push()
+                pump()
             case (_, Terminated(`connection`)) =>
                 logger debug s"Terminated Connection Acotr, Connection: ${connection}, Self: ${self.ref}, Cancel Stage!"
                 fail(out, new RuntimeException(s"Terminated Connection Acotr, Connection: ${connection}, Self: ${self.ref}"))
@@ -122,7 +122,7 @@ class Input[T <: TrackedFrame](
             super.postStop
         }
 
-        def onMessage(x: (ActorRef, Any)) = x match {
+        def onMessage(x: (ActorRef, Any)): Unit = x match {
             case (_, Terminated(`connection`)) =>
                 logger debug s"Terminated Connection Acotr, Connection: ${connection}, Self: ${self.ref}, Cancel Stage!"
                 cancel(in)

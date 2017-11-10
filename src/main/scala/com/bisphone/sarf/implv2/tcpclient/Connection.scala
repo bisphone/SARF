@@ -68,6 +68,10 @@ object Connection {
         reader: FrameReader[T],
         materializer: Materializer,
         executionContextExecutor: ExecutionContextExecutor
+    )(
+        implicit
+        $tracked: ClassTag[T],
+        $untracked: ClassTag[U]
     ): Props = Props { new Connection(
         director, id, config,
         writer, reader,
@@ -79,20 +83,20 @@ object Connection {
 }
 
 class Connection [
-Fr <: TrackedFrame,
-UFr <: UntrackedFrame[Fr]
+T <: TrackedFrame,
+U <: UntrackedFrame[T]
 ] (
     director: ActorRef,
     id: Int,
     config: Connection.Config,
-    writer: FrameWriter[Fr, UFr],
-    reader: FrameReader[Fr],
+    writer: FrameWriter[T, U],
+    reader: FrameReader[T],
     materializer: Materializer,
     executionContext: ExecutionContextExecutor
 )(
     implicit
-    $tracked: ClassTag[Fr],
-    $untracked: ClassTag[UFr]
+    $tracked: ClassTag[T],
+    $untracked: ClassTag[U]
 ) extends Actor with Module {
 
     val name = config.name
@@ -166,14 +170,16 @@ UFr <: UntrackedFrame[Fr]
             .joinMat(flow) {
                 case (outgoing, _) => outgoing.map { i =>
                     logger debug s"Outgoing, ${i}"
-                }
-            }.run.recover{
+                }(executionContext)
+            }.run()(materializer).recover{
                 case NonFatal(cause) =>
                     logger error (s"Can't establish connection!",cause)
                     context stop self
-            }
+            }(executionContext)
 
-        context.system.scheduler.scheduleOnce(config.tcp.connectingTimeout, self, TimedOut)
+        context.system.scheduler.scheduleOnce(
+            config.tcp.connectingTimeout, self, TimedOut
+        )(executionContext)
 
         logger debug "PreStart"
     }
