@@ -1,14 +1,14 @@
 package com.bisphone.sarf.implv2.tcpclient
 
 import scala.collection.mutable
-import scala.concurrent.duration.{Duration, FiniteDuration}
+import scala.concurrent.duration.{ Duration, FiniteDuration }
 import scala.reflect.ClassTag
 import scala.util.Try
-
-import akka.actor.{Actor, ActorRef, Props, Terminated}
+import akka.actor.{ Actor, ActorRef, Props, Terminated }
 import akka.stream.ActorMaterializer
 import com.bisphone.launcher.Module
-import com.bisphone.sarf.{FrameReader, FrameWriter, TrackedFrame, UntrackedFrame}
+import com.bisphone.sarf.implv2.tcpclient.Director.ConnectionRef
+import com.bisphone.sarf.{ FrameReader, FrameWriter, TrackedFrame, UntrackedFrame }
 import com.bisphone.std._
 
 object Director {
@@ -84,6 +84,7 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
     val all = mutable.HashMap.empty[ActorRef, Director.ConnectionRef]
 
     def newConnection(cfg: Connection.Config, retryCount: Int) = {
+        logger debug s"Trying, RetryCount: ${retryCount}, ${stringOfConf(cfg)}"
         val id = count
         val props = Connection.props(self, id, cfg, writer, reader, materializer, context.dispatcher)
         val actor = context actorOf props
@@ -106,7 +107,9 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
     }
 
     def scheduleForRenewing(ref: ActorRef) = {
+
         val tmp = removeConnection(ref)
+
         val retryCount = tmp.state match {
             case _: Connection.State.Trying => tmp.retryCount + 1
             case _ => 0
@@ -116,12 +119,26 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
             config.retryDelay,self,
             Director.RetryRef(tmp.config, retryCount)
         )(context.dispatcher)
+
+        logger debug s"Schedule for Retry, ${stringOfRef(tmp)}"
     }
 
     def setEstablishedConnection(ref: ActorRef, state: Connection.State.Established) = {
         val newVal = all(ref).copy(retryCount = 0, state = state)
         all(ref) = newVal
         newVal
+    }
+
+    def stringOfRef(conn: ConnectionRef) = {
+        s"ID: ${conn.id}, Name: ${conn.config.name}, Host: ${conn.config.tcp.host}, Port: ${conn.config.tcp.port}"
+    }
+
+    def stringOfSt(conn: Connection.State.Established) = {
+        s"ID: ${conn.id}, Name: ${conn.config.name}, Host: ${conn.config.tcp.host}, Port: ${conn.config.tcp.port}"
+    }
+
+    def stringOfConf(conf: Connection.Config) = {
+        s"Name: ${conf.name}, Host: ${conf.tcp.host}, Port: ${conf.tcp.port}"
     }
 
     override def preStart: Unit = {
@@ -131,14 +148,26 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
     def normal: Receive = {
 
         case Terminated(ref) if all(ref).state.isInstanceOf[Connection.State.Established] =>
+
+            val conn = all(ref)
+            logger info s"Terminated An Established Connection, ${stringOfRef(conn)}"
+
             _established -= 1
+            logger info s"Total Established Connection: ${_established}"
+
             scheduleForRenewing(ref)
 
         case Terminated(ref) if all contains ref =>
+            val conn = all(ref)
+            logger info s"Terminated An Unestablished Connection, ${stringOfRef(conn)}"
             scheduleForRenewing(ref)
 
         case st: Connection.State.Established =>
+            logger info s"New Established Connection, ${stringOfSt(st)}"
+
             _established += 1
+            logger info s"Total Established Connection: ${_established}"
+
             val tmp = setEstablishedConnection(sender, st)
             proxy ! Proxy.NewConnection(
                 tmp.id, tmp.config.name,
@@ -146,8 +175,9 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
                 tmp.state.ref
             )
 
-            if (_established >= config.minumumAdorableConnections && _calledFnReady) {
+            if (_established >= config.minumumAdorableConnections && !_calledFnReady) {
                 _calledFnReady = true
+                logger info s"Get Ready!"
                 fnReady(StdSuccess(proxy))
             }
 

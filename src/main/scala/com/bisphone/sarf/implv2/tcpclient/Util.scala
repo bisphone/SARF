@@ -75,7 +75,7 @@ trait ConnectionBalancer extends Module {
 
     def all: Seq[ConnectionContext]
 
-    def pickOne: ConnectionContext
+    def pickOne: Option[ConnectionContext]
 }
 
 class RoundRobinConnectionBalancer(

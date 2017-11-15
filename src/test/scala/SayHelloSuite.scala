@@ -35,37 +35,13 @@ class SayHelloSuite
 
     val stream = StreamConfig(2000, order, 10)
 
-    val stat = StatCollector("server-stat", StatCollector.Config(1 minute, 3), LoggerFactory.getLogger("server-stat"))(system)
+    // val stat = StatCollector("server-stat", StatCollector.Config(1 minute, 3), LoggerFactory.getLogger("server-stat"))(system)
 
-    val service = {
 
-        val failureHandler = new FailureHandler {
-            def apply (cause: Throwable, bytes: ByteString): Future[IOCommand] = {
-                Future successful IOCommand.Close
-            }
-        }
-
-        val x = Func[SayBye] { sayBye => Error("Ops").asyncLeft }
-
-        new Service.Builder[Tracked, Untracked](
-            system.dispatcher,
-            failureHandler,
-            reader,
-            writer,
-            Some(stat)
-        // Compiler Error for This: "serveFunc{ (sayHello: SayHello) => ... }"
-        ).serveFunc[SayHello]{ sayHello =>
-            AsyncResult right Hello(sayHello.to)
-            // AsyncResult right Bye(rq.to)
-        }.serveFunc(x).result.get
-    }
+    val serverName = "single"
 
     val res = for {
-        server <-
-        TCPServer(
-            "say-server",
-            tcpServer, stream, true
-        )(service)
+        server <- util.Server.tcp(serverName, tcpServer, stream)
         client <-
         TCPClient[Tracked, Untracked](
             "sayclient",
@@ -89,10 +65,9 @@ class SayHelloSuite
 
         val name = "Reza"
 
-        client(SayHello(name)) onRight { _.name shouldEqual name }
+        client(SayHello(name)) onRight { _.name shouldEqual s"'${name}' from '${serverName}'" }
 
-        client(SayBye(name)) onLeft { _ shouldEqual Error("Ops") }
-
+        client(SayBye(name)) onLeft { _ shouldEqual Error(s"Ops from '${serverName}'") }
     }
 
 }

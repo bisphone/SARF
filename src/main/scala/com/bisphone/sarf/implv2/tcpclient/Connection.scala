@@ -105,16 +105,18 @@ U <: UntrackedFrame[T]
 
     def trying(st: State.Trying, income: Option[ActorRef], outgo: Option[ActorRef]): Receive = {
 
-        logger info s"Trying, Name: ${config.name}, Host: ${config.tcp.host}, Port: ${config.tcp.port}"
+        logger debug s"Trying, Name: ${config.name}, Host: ${config.tcp.host}, Port: ${config.tcp.port}, Income: ${income}, Outgo: ${outgo}"
 
-        (income, outgo) match {
+        /*(income, outgo) match {
             case (Some(in), Some(out)) =>
-                procEstablished(
+                established(
                     State.Established(id, self, config, System.currentTimeMillis()),
                     Connection.Gate(in, out)
                 )
             case (in, out) => procTrying(st, in, out)
-        }
+        }*/
+
+        procTrying(st, income, outgo)
     }
 
     def procTrying(st: State.Trying, income: Option[ActorRef], outgo: Option[ActorRef]): Receive = {
@@ -127,6 +129,10 @@ U <: UntrackedFrame[T]
         case TimedOut(startedAt) =>
             logger debug s"Trying, TimedOut!, Stopping"
             context stop self
+        case st: State.Established if income.isDefined && outgo.isDefined =>
+            context become established(st, Gate(in = income.get, out = outgo.get))
+        case st: State.Established =>
+            throw new IllegalStateException("Established with out In & Out Registeration!")
     }
 
     def established(st: State.Established, gate: Gate): Receive = {
@@ -142,10 +148,12 @@ U <: UntrackedFrame[T]
 
         case Send(frame) =>
             // @todo: Implement BackPresure !
+            logger trace s"Send , TrackingKey: ${frame.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}"
             gate.out ! frame
 
         case Recieved(frame) =>
             // @todo: Implement BackPresure !
+            logger trace s"Recieve, TrackingKey: ${frame.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}"
             director ! frame
 
         case Terminated(worker) if worker == gate.in =>
@@ -164,12 +172,13 @@ U <: UntrackedFrame[T]
 
         super.preStart()
 
-        val flow = ConnectionFlow(s"${name}.flow", config.stream, self, reader)
+        val flow = ConnectionFlow(s"${name}.flow", config.stream, self, reader, config.stream.byteOrder)
 
         Tcp()(context.system).outgoingConnection(config.tcp.host, config.tcp.port)
             .joinMat(flow) {
                 case (outgoing, _) => outgoing.map { i =>
                     logger debug s"Outgoing, ${i}"
+                    self ! State.Established(id, self, config, System.currentTimeMillis)
                 }(executionContext)
             }.run()(materializer).recover{
                 case NonFatal(cause) =>

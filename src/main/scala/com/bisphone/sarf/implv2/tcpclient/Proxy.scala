@@ -9,7 +9,7 @@ import com.bisphone.sarf.{FrameWriter, TrackedFrame, UntrackedFrame}
 object Proxy {
 
     case class NewConnection(id: Int, name: String, desc: String, ref: ActorRef)
-    case class Send[T <: TrackedFrame, U <: UntrackedFrame[T]](frame: U, requestTime: Long)
+    case class Send[U <: UntrackedFrame[_]](frame: U, requestTime: Long)
     case class Recieved[T <: TrackedFrame](frame: T)
 
     def props[T <: TrackedFrame, U <: UntrackedFrame[T]](
@@ -41,12 +41,14 @@ class Proxy[T <: TrackedFrame, U <: UntrackedFrame[T]](
     override def receive: Receive = {
 
         case Proxy.Send(frame: U, time) =>
+
             balancer.pickOne match {
 
                 case Some(conn) =>
                     val ctx = tracker track (sender, conn)
                     val tracked = writer writeFrame (frame, ctx.trackingKey)
                     conn.ref ! Connection.Send(tracked)
+                    logger trace s"Send, TrackingKey: ${ctx.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}, Caller: ${ctx.caller}, Connection: ${conn}"
 
                 case None =>
                     logger warn s"NotAvailableConnection!"

@@ -12,7 +12,10 @@
         <appender-ref ref="STDOUT"/>
     </logger>
 
-    <root level="INFO">
+    <!--logger name="client-first.flow" level="OFF"/>
+    <logger name="client-second.flow" level="OFF"/-->
+
+    <root level="TRACE">
         <appender-ref ref="STDOUT"/>
     </root>
 

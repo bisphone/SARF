@@ -10,7 +10,25 @@ import com.bisphone.std._
 import akka.pattern.ask
 import com.bisphone.util.AsyncResult
 
-class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]](
+object TCPClient {
+    def apply [T <: TrackedFrame, U <: UntrackedFrame[T]](
+        name: String,
+        config: Director.Config,
+        writer: FrameWriter[T, U],
+        reader: FrameReader[T],
+        actorSystem: ActorSystem,
+        executionContext: ExecutionContextExecutor
+    )(
+        implicit
+        $tracked: ClassTag[T],
+        $untracked: ClassTag[U]
+    ): com.bisphone.sarf.TCPClientRef[T, U] = {
+        new TCPClient(name, config, writer, reader, actorSystem, executionContext)
+    }
+
+}
+
+class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]] private (
     val name: String,
     config: Director.Config,
     writer: FrameWriter[T, U],
@@ -54,7 +72,7 @@ class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]](
         [error]         case Proxy.Send(frame: U, time) =>
          */
 
-        ask(proxy, Proxy.Send[T,U](rq, now))(config.requestTimeout).map {
+        ask(proxy, Proxy.Send[U](rq, now))(config.requestTimeout).map {
 
             // case Director.Event.CantSend => throw new RuntimeException("Can't send message! Problem with connection")
             case Proxy.Recieved(rs: T) => rs

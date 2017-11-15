@@ -54,7 +54,7 @@ private[implv1] object RequestFlowStream {
             buf.toString()
          } else if (arr.size == 1) (iter.next() & 0xFF).toString else ""
 
-         logger trace s"${subject}, Bytes ${str}"
+         logger trace s"${subject}, Bytes(${bytes.size}): ${str}"
 
          bytes
       }
