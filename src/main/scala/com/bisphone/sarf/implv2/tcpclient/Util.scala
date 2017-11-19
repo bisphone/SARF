@@ -84,7 +84,7 @@ class RoundRobinConnectionBalancer(
 
     val logger = loadLogger
 
-    private val _all = mutable.Queue.empty[ConnectionContext]
+    private var _all = mutable.Queue.empty[ConnectionContext]
 
     private var _pointer = ConnectionContext
 
@@ -108,7 +108,7 @@ class RoundRobinConnectionBalancer(
 
     def remove(ref: ActorRef): Option[ConnectionContext] = {
         all.find(_.ref == ref).map { ctx =>
-            mutable.Queue(all.filter(_ != ctx): _*)
+            _all = mutable.Queue(all.filter(_ != ctx): _*)
             ctx
         }
     }

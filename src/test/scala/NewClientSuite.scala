@@ -19,22 +19,22 @@ class NewClientSuite extends TestKit(ActorSystem()) with BaseSuite {
     val first = "first"
     val second = "second"
 
-    val servers = Map(
+    val serversConf = Map(
         first -> TCPConfigForServer("localhost", 10010, 10),
         second -> TCPConfigForServer("localhost", 10020, 10)
     )
 
-    val allServers = Future sequence servers.map {
+    val allServers = Future sequence serversConf.map {
         case (name, conf) => Server.tcp(name, conf, stream)
     }
 
-    Await.result(allServers, 20 seconds)
+    val Seq(firstSrv, secondSrv) = Await.result(allServers, 20 seconds).toSeq
 
     println(" > Init Servers ... Done!")
 
     val conns =
         Connection.Config(s"client-${first}", TCPConfigForClient("localhost", 10010, 10 seconds), stream) ::
-            // Connection.Config(s"client-${second}", TCPConfigForClient("localhost", 10020, 10 seconds), stream) ::
+            Connection.Config(s"client-${second}", TCPConfigForClient("localhost", 10020, 10 seconds), stream) ::
             Nil
 
     val conf =
@@ -86,9 +86,29 @@ class NewClientSuite extends TestKit(ActorSystem()) with BaseSuite {
 
         implicit val timeout = 10 seconds
 
-        getRight(SayHello(name)).name should startWith(s"'${name}' from")
+        val rsl1 = getRight(SayHello(name)).name
+        info(s"Result: ${rsl1 }")
+        rsl1 should startWith(s"'${name}' from")
 
-        getLeft(SayBye(name)).value should  startWith(s"Ops from")
+        val rsl2 = getLeft(SayBye(name)).value
+        info(s"Result: ${rsl2}")
+        rsl2 should  startWith(s"Ops from")
+
+        val rsl3 = getLeft(SayBye(name)).value
+        info(s"Result: ${rsl3}")
+        rsl2 should  startWith(s"Ops from")
+
+        info(s"Shutting down first server: ${firstSrv}")
+        Await.result(firstSrv.shutdown, 10 seconds)
+        info(s"Done!")
+
+        for (i <- 1 to 200) yield {
+            val rsl = getRight(SayHello(name)).name
+            info(s"Result(${i}): ${rsl}")
+            rsl should startWith(s"'${name}' from")
+            Thread sleep 1000
+        }
+
     }
 
 }

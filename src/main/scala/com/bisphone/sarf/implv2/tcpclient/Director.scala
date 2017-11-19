@@ -182,6 +182,7 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
             }
 
         case Director.RetryRef(cfg, retryCount) =>
+            logger debug s"Retrying, RetryCount: ${retryCount}, Config: ${config}"
             newConnection(cfg, retryCount)
     }
 
