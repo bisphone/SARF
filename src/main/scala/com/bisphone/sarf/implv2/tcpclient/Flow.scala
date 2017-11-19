@@ -145,8 +145,9 @@ Then make it lazy !
             override def onPush(): Unit = {
                 val bytes = grab(in)
                 val frame = reader readFrame bytes
-                logger trace s"OnPush, TrackingKey: ${frame.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}, Bytes(${bytes.size}): ${bytes}"
-                connection ! frame
+                logger trace s"OnPush, TrackingKey: ${frame.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}, Bytes(${bytes.size}): ${bytes}, Connection: ${connection}"
+                pull(in)
+                connection ! Connection.Recieved(frame)
             }
         })
 
@@ -154,6 +155,7 @@ Then make it lazy !
             super.preStart()
             self watch connection
             connection ! Connection.EstablishedInput(self.ref)
+            pull(in)
             logger debug s"PreStart, Watch & Register Connection: ${connection}, Self: ${self}"
         }
 

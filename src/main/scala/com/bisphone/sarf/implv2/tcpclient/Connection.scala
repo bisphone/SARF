@@ -63,7 +63,8 @@ object Connection {
 
 
     def props[T <: TrackedFrame, U <: UntrackedFrame[T]](
-        director: ActorRef, id: Int, config: Config,
+        director: ActorRef, proxy: ActorRef,
+        id: Int, config: Config,
         writer: FrameWriter[T, U],
         reader: FrameReader[T],
         materializer: Materializer,
@@ -73,7 +74,7 @@ object Connection {
         $tracked: ClassTag[T],
         $untracked: ClassTag[U]
     ): Props = Props { new Connection(
-        director, id, config,
+        director, proxy, id, config,
         writer, reader,
         materializer,
         executionContextExecutor
@@ -87,6 +88,7 @@ T <: TrackedFrame,
 U <: UntrackedFrame[T]
 ] (
     director: ActorRef,
+    proxy: ActorRef,
     id: Int,
     config: Connection.Config,
     writer: FrameWriter[T, U],
@@ -133,6 +135,9 @@ U <: UntrackedFrame[T]
             context become established(st, Gate(in = income.get, out = outgo.get))
         case st: State.Established =>
             throw new IllegalStateException("Established with out In & Out Registeration!")
+        case Terminated(`director`) | Terminated(`proxy`) =>
+            logger warn s"Trying, Director/Proxy has terminated!"
+            context stop self
     }
 
     def established(st: State.Established, gate: Gate): Receive = {
@@ -151,10 +156,14 @@ U <: UntrackedFrame[T]
             logger trace s"Send , TrackingKey: ${frame.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}"
             gate.out ! frame
 
-        case Recieved(frame) =>
+        case ev @ Connection.Recieved(frame) =>
             // @todo: Implement BackPresure !
-            logger trace s"Recieve, TrackingKey: ${frame.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}"
-            director ! frame
+            logger trace s"Recieve, TrackingKey: ${frame.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}, Director: ${director}"
+            proxy ! ev
+
+        case Terminated(`director`) | Terminated(`proxy`) =>
+            logger warn s"Established, Director/Proxy has terminated!"
+            context stop self
 
         case Terminated(worker) if worker == gate.in =>
             logger debug s"Established, Input Termination, Input: ${worker}, Stopping"
@@ -189,6 +198,9 @@ U <: UntrackedFrame[T]
         context.system.scheduler.scheduleOnce(
             config.tcp.connectingTimeout, self, TimedOut
         )(executionContext)
+
+        context watch proxy
+        context watch director
 
         logger debug "PreStart"
     }

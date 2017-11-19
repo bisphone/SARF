@@ -59,6 +59,7 @@ class Proxy[T <: TrackedFrame, U <: UntrackedFrame[T]](
         case Connection.Recieved(frame) =>
             tracker.resolve(frame.trackingKey) match {
                 case Some(ctx) =>
+                    logger trace s"Received, ${ctx}, ${frame}"
                     ctx.caller ! Proxy.Recieved(frame)
                 case None =>
                     logger error s"Unrequested Response, TrackingKey: ${frame.trackingKey}"

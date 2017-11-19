@@ -86,7 +86,7 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
     def newConnection(cfg: Connection.Config, retryCount: Int) = {
         logger debug s"Trying, RetryCount: ${retryCount}, ${stringOfConf(cfg)}"
         val id = count
-        val props = Connection.props(self, id, cfg, writer, reader, materializer, context.dispatcher)
+        val props = Connection.props(self, proxy, id, cfg, writer, reader, materializer, context.dispatcher)
         val actor = context actorOf props
         context watch actor
         val state = Connection.State.Trying(id, actor, cfg, System.currentTimeMillis())
