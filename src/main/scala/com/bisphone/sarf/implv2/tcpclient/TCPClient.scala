@@ -1,14 +1,16 @@
 package com.bisphone.sarf.implv2.tcpclient
 
-import scala.concurrent.{Await, ExecutionContextExecutor, Future, Promise}
+import scala.concurrent.{ Await, ExecutionContextExecutor, Future, Promise }
 import scala.reflect.ClassTag
-
-import akka.actor.{ActorRef, ActorSystem, PoisonPill}
+import akka.actor.{ ActorRef, ActorSystem, PoisonPill }
 import com.bisphone.launcher.Module
 import com.bisphone.sarf._
 import com.bisphone.std._
 import akka.pattern.ask
+import com.bisphone.sarf.implv2.tcpclient
 import com.bisphone.util.AsyncResult
+
+import scala.concurrent.duration.FiniteDuration
 
 object TCPClient {
     def apply [T <: TrackedFrame, U <: UntrackedFrame[T]](
@@ -22,7 +24,7 @@ object TCPClient {
         implicit
         $tracked: ClassTag[T],
         $untracked: ClassTag[U]
-    ): com.bisphone.sarf.TCPClientRef[T, U] = {
+    ): TCPClient[T, U] = {
         new TCPClient(name, config, writer, reader, actorSystem, executionContext)
     }
 
@@ -41,24 +43,26 @@ class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]] private (
     $untracked: ClassTag[U]
 ) extends com.bisphone.sarf.TCPClientRef[T, U] with Module {
 
-    val logger = loadLogger
-    val readyness = Promise[ActorRef]()
-    val directorName = s"${name}.director"
-    val directorProps = Director.props(
+    protected val logger = loadLogger
+
+    protected val readyness = Promise[ActorRef]()
+    protected val directorName = s"${name}.director"
+    protected val directorProps = Director.props(
         directorName, config, writer, reader, {
             case StdSuccess(ref) =>
                 readyness success (ref)
             case StdFailure(cause) =>
                 readyness failure cause
-        }, { _ => }
+        }, { _ => },
+        new tcpclient.ReConnectingPolicy.SimpleHandler(s"${name}.reconnecting-policy", config.retryDelay)
     )
-    val director = actorSystem actorOf (directorProps, name)
+    protected val director = actorSystem actorOf (directorProps, name)
 
-    val proxy = Await.result(readyness.future, config.initTimeout)
+    protected val proxy = Await.result(readyness.future, config.initTimeout)
+
+    protected def now = System.currentTimeMillis()
 
     override def isActive() = Future successful true
-
-    def now = System.currentTimeMillis()
 
     override def send(rq: U) = {
 
@@ -79,7 +83,7 @@ class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]] private (
             case unexp => throw new RuntimeException(s"Unexpected Response for 'Send': ${unexp}")
         }.recover {
             case cause: java.util.concurrent.TimeoutException =>
-                logger error (s"Send, Timeout, Request: ${rq.dispatchKey}, Director: ${director}", cause)
+                logger error (s"Send, Timeout, Request: ${rq.dispatchKey}, Director: ${director}, Proxy: ${proxy}", cause)
                 /*Try(Await.result(getState.map { st =>
                     logger info s"Send, Timeout, GetState: ${st}, Director: ${ref}"
                 }, 60 seconds))*/
@@ -117,6 +121,12 @@ class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]] private (
         }
 
         AsyncResult.fromFuture(rsl)
+    }
 
+    def healthcheck(desc: String = "How Are You", timeout: FiniteDuration = config.requestTimeout) = Try {
+        Await.result(
+            ask(proxy, Proxy.HealthCheck(desc))(timeout),
+            timeout
+        )
     }
 }

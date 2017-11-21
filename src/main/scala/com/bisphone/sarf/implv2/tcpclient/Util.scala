@@ -1,10 +1,11 @@
 package com.bisphone.sarf.implv2.tcpclient
 
 import scala.collection.mutable
-
 import akka.actor.ActorRef
 import com.bisphone.launcher.Module
 import com.bisphone.std._
+
+import scala.concurrent.duration.FiniteDuration
 
 case class ConnectionContext(
     name: String,
@@ -75,6 +76,8 @@ trait ConnectionBalancer extends Module {
 
     def all: Seq[ConnectionContext]
 
+    def count: Int
+
     def pickOne: Option[ConnectionContext]
 }
 
@@ -89,6 +92,8 @@ class RoundRobinConnectionBalancer(
     private var _pointer = ConnectionContext
 
     def all = _all.toSeq
+
+    override def count = _all.size
 
     def pickOne: Option[ConnectionContext] = {
         if (_all.isEmpty) None
@@ -110,6 +115,45 @@ class RoundRobinConnectionBalancer(
         all.find(_.ref == ref).map { ctx =>
             _all = mutable.Queue(all.filter(_ != ctx): _*)
             ctx
+        }
+    }
+}
+
+case class ConnectionRef(
+    id: Int,
+    config: Connection.Config,
+    state: Connection.State,
+    retryCount: Int
+)
+
+trait ReConnectingPolicy
+
+object ReConnectingPolicy {
+
+    case class Retry(delay: FiniteDuration) extends ReConnectingPolicy
+    case object Remove extends ReConnectingPolicy
+
+    trait Handler {
+        def handle(ref: ConnectionRef): ReConnectingPolicy
+    }
+
+    class SimpleHandler(
+        override val name: String,
+        retryDelay: FiniteDuration
+    ) extends Handler with Module {
+
+        override protected val logger = loadLogger
+
+        logger info s"Init, ClassOf[${getClass.getName}]"
+
+        private def stringOfConnection(conf: Connection.Config) = {
+            s"Connection.Config(${conf.name}, ${conf.tcp.host}:${conf.tcp.port})"
+        }
+
+        override def handle (ref: ConnectionRef): ReConnectingPolicy = {
+            // require(ref.state.isInstanceOf[Connection.State.Unstablished])
+            logger debug s"Handle, ${stringOfConnection(ref.config)}, Retry(${retryDelay})"
+            Retry(retryDelay)
         }
     }
 }

@@ -7,7 +7,6 @@ import scala.util.Try
 import akka.actor.{ Actor, ActorRef, Props, Terminated }
 import akka.stream.ActorMaterializer
 import com.bisphone.launcher.Module
-import com.bisphone.sarf.implv2.tcpclient.Director.ConnectionRef
 import com.bisphone.sarf.{ FrameReader, FrameWriter, TrackedFrame, UntrackedFrame }
 import com.bisphone.std._
 
@@ -23,13 +22,6 @@ object Director {
         requestTimeout: FiniteDuration
     )
 
-    case class ConnectionRef(
-        id: Int,
-        config: Connection.Config,
-        state: Connection.State,
-        retryCount: Int
-    )
-
     case class RetryRef(
         config: Connection.Config,
         retryCount: Int
@@ -41,12 +33,13 @@ object Director {
         writer: FrameWriter[T, U],
         reader: FrameReader[T],
         fnReady: StdTry[ActorRef] => Unit,
-        fnUnready: Unit => Unit
+        fnUnready: Unit => Unit,
+        reConnectingPolicy: ReConnectingPolicy.Handler
     )(
         implicit
         $tracked: ClassTag[T],
         $untracked: ClassTag[U]
-    ): Props = Props { new Director(name, config, writer, reader, fnReady, fnUnready) }
+    ): Props = Props { new Director(name, config, writer, reader, fnReady, fnUnready, reConnectingPolicy) }
 
 }
 
@@ -56,7 +49,8 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
     writer: FrameWriter[T, U],
     reader: FrameReader[T],
     fnReady: StdTry[ActorRef] => Unit,
-    fnUnready: Unit => Unit
+    fnUnready: Unit => Unit,
+    reConnectingPolicy: ReConnectingPolicy.Handler
 )(
     implicit
     $tracked: ClassTag[T],
@@ -81,7 +75,7 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
 
     val materializer = ActorMaterializer()
 
-    val all = mutable.HashMap.empty[ActorRef, Director.ConnectionRef]
+    val all = mutable.HashMap.empty[ActorRef, ConnectionRef]
 
     def newConnection(cfg: Connection.Config, retryCount: Int) = {
         logger debug s"Trying, RetryCount: ${retryCount}, ${stringOfConf(cfg)}"
@@ -90,7 +84,7 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
         val actor = context actorOf props
         context watch actor
         val state = Connection.State.Trying(id, actor, cfg, System.currentTimeMillis())
-        all(actor) = Director.ConnectionRef(id, cfg, state, retryCount)
+        all(actor) = ConnectionRef(id, cfg, state, retryCount)
     }
 
     def removeConnection(ref: ActorRef) = {
@@ -110,17 +104,24 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
 
         val tmp = removeConnection(ref)
 
-        val retryCount = tmp.state match {
-            case _: Connection.State.Trying => tmp.retryCount + 1
-            case _ => 0
+        reConnectingPolicy handle tmp match {
+            case ReConnectingPolicy.Retry(delay) =>
+
+                logger info s"Schedule for Retry Unstablished Connection, ${stringOfRef(tmp)}"
+
+                val retryCount = tmp.state match {
+                    case _: Connection.State.Trying => tmp.retryCount + 1
+                    case _ => 0
+                }
+
+                context.system.scheduler.scheduleOnce(
+                    delay, self,
+                    Director.RetryRef(tmp.config, retryCount)
+                )(context.dispatcher)
+
+            case ReConnectingPolicy.Remove =>
+                logger info s"Removed Unstablished Connection, ${stringOfRef(tmp)}"
         }
-
-        context.system.scheduler.scheduleOnce(
-            config.retryDelay,self,
-            Director.RetryRef(tmp.config, retryCount)
-        )(context.dispatcher)
-
-        logger debug s"Schedule for Retry, ${stringOfRef(tmp)}"
     }
 
     def setEstablishedConnection(ref: ActorRef, state: Connection.State.Established) = {

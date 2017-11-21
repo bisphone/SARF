@@ -12,8 +12,12 @@
         <appender-ref ref="STDOUT"/>
     </logger>
 
-    <logger name="client-first.flow" level="TRACE"/>
+    <!--logger name="client-first.flow" level="INFO"/>
     <logger name="client-second.flow" level="INFO"/>
+    <logger name="first-server.sarf.server" level="INFO" />
+    <logger name="second-server.sarf.server" level="INFO" />
+    <logger name="com.bisphone.sarf.implv1.Service" level="INFO" /-->
+    <!--logger name="client.proxy" level="TRACE"/-->
 
     <root level="TRACE">
         <appender-ref ref="STDOUT"/>

@@ -12,6 +12,8 @@ object Proxy {
     case class Send[U <: UntrackedFrame[_]](frame: U, requestTime: Long)
     case class Recieved[T <: TrackedFrame](frame: T)
 
+    case class HealthCheck(desc: String)
+
     def props[T <: TrackedFrame, U <: UntrackedFrame[T]](
         name: String,
         director: ActorRef,
@@ -36,12 +38,19 @@ class Proxy[T <: TrackedFrame, U <: UntrackedFrame[T]](
 
     val queued = mutable.Queue.empty[RequestContext]
 
+    val unit = ()
+
     import Proxy._
 
     override def receive: Receive = {
 
+        case Proxy.HealthCheck(desc) =>
+            logger info s"HealthCheck, Desc: ${desc}, "
+            sender ! unit
+
         case Proxy.Send(frame: U, time) =>
 
+            logger trace s"Here, Sender: ${sender}"
             balancer.pickOne match {
 
                 case Some(conn) =>
@@ -78,7 +87,7 @@ class Proxy[T <: TrackedFrame, U <: UntrackedFrame[T]](
         case Terminated(ref) =>
             (balancer remove ref) match {
                 case Some(ctx) =>
-                    logger info s"Lost Connection, ID: ${ctx.id}, Name: ${ctx.name}"
+                    logger info s"Lost Connection, ID: ${ctx.id}, Name: ${ctx.name}, Remained: ${balancer.count}"
                     logger debug s"Lost Connection, ${ctx}"
                 case None =>
                     logger warn s"Lossing Connection, UNREGISTERD"
