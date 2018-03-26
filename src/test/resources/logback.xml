@@ -19,7 +19,7 @@
     <logger name="com.bisphone.sarf.implv1.Service" level="INFO" /-->
     <!--logger name="client.proxy" level="TRACE"/-->
 
-    <root level="TRACE">
+    <root level="INFO">
         <appender-ref ref="STDOUT"/>
     </root>
 
