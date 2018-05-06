@@ -152,7 +152,7 @@ object ReConnectingPolicy {
 
         override def handle (ref: ConnectionRef): ReConnectingPolicy = {
             // require(ref.state.isInstanceOf[Connection.State.Unstablished])
-            logger debug s"Handle, ${stringOfConnection(ref.config)}, Retry(${retryDelay})"
+            logger warn s"Handle, ${stringOfConnection(ref.config)}, Retry(${retryDelay})"
             Retry(retryDelay)
         }
     }

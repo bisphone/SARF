@@ -27,13 +27,15 @@ class NewClientSuite extends TestKit(ActorSystem()) with BaseSuite with NewClien
 
         val name = "Reza"
 
+
         implicit val timeout: FiniteDuration = 10 seconds
 
         var firstServer = up(First)
         var secondServer = up(Second)
 
-        implicit val client = {
+        logSeperator("Servers are Up & Running")
 
+        def new1 = {
             val conns =
                 First.conn(timeout) :: Second.conn(timeout) :: Nil
 
@@ -43,13 +45,34 @@ class NewClientSuite extends TestKit(ActorSystem()) with BaseSuite with NewClien
                     minumumAdorableConnections = 1,
                     maximumTroubleTime = 20 seconds,
                     maxRetry = 3,
-                    retryDelay = 5 seconds,
+                    retryDelay = 10 seconds,
                     initTimeout = 20 seconds,
                     requestTimeout = 5 seconds
                 )
 
             TCPClient("client", conf, SayProtocol.writer, SayProtocol.reader, system, ec)
         }
+
+        def new2 = {
+            val conns =
+                First.conn(timeout) :: Second.conn(timeout) :: Nil
+
+            val conf =
+                NewDirector.Config(
+                    connections = conns,
+                    greenStateLimit = 2,
+                    endureRedState = Duration.Inf,
+                    initTimeout = 10 seconds,
+                    requestTimeout = 5 seconds,
+                    reconnectingDelay = 10 seconds
+                )
+
+            NewClient("client", conf, SayProtocol.writer, SayProtocol.reader, system, ec)
+        }
+
+        implicit val client = new2
+
+        logSeperator("Client is UP !?")
 
 
         getRight(SayHello(name)).name should startWith(s"'${name }' from")
@@ -58,62 +81,60 @@ class NewClientSuite extends TestKit(ActorSystem()) with BaseSuite with NewClien
 
         getLeft(SayBye(name)).value should startWith(s"Ops from")
 
+        logSeperator("Client is Working !")
+
         try {
 
-            logSeperator("A")
+            logSeperator("FirstServer is going down ...")
 
             down(firstServer)
 
-            logSeperator("B")
+            logSeperator("FirstServer is down! try messages ...")
 
             // for (i <- 1 to 200) getRight(SayHello(name)).name should startWith(s"'${name }' from")
             for (i <- 1 to 200) justLog(SayHello(name))
 
-            logSeperator("C")
+            logSeperator("Starting First Server ... ")
 
             firstServer = up(First)
 
-            logSeperator("D")
-
             restFor(7 seconds)
 
-            logSeperator("E")
+            logSeperator("First Server ... Up ?! Going to send messages ...")
 
             // for (i <- 1 to 20) getRight(SayHello(name)).name should startWith(s"'${name }' from")
             for (i <- 1 to 20) justLog(SayHello(name))
 
-            logSeperator("F")
+            logSeperator("End of Messages; Second Server Shutdown ... ")
 
             down(secondServer)
 
-            logSeperator("G")
+            logSeperator("Second Server Shutdown! Going to send messages ...")
 
             // for (i <- 1 to 20) getRight(SayHello(name)).name should startWith(s"'${name }' from")
             for (i <- 1 to 20) justLog(SayHello(name))
 
-            logSeperator("H")
+            logSeperator("First Server Shutdown ...")
 
             down(firstServer)
 
-            logSeperator("I")
+            logSeperator("First Server Shutdown! Going to send messages ...")
 
             for (i <- 1 to 20) justLog(SayHello(name))
 
-            logSeperator("J")
+            logSeperator("End of messages! Going to Start both servers ...")
 
             firstServer = up(First)
             secondServer = up(Second)
 
-            logSeperator("K")
-
 
             restFor(10 seconds)
 
-            logSeperator("M")
+            logSeperator("Servers are Up and Running ?! Going to Send Messages")
 
             for (i <- 1 to 20) getRight(SayHello(name)).name should startWith(s"'${name }' from")
 
-            logSeperator("N")
+            logSeperator("End Of Messages!")
 
         } catch {
             case NonFatal(cause) =>
@@ -261,7 +282,9 @@ object NewClientSuite {
         }
 
         def logSeperator(title: String) = {
-            logger info s">>>>>>>>>>>>>>>>>>>>> ${title} <<<<<<<<<<<<<<<<<<<<<<<\n"
+            val const = 120
+            val len = const - title.length
+            logger info s"### ${title} ${"#" * len}\n"
         }
 
     }

@@ -22,6 +22,7 @@ object Director {
         requestTimeout: FiniteDuration
     )
 
+
     case class RetryRef(
         config: Connection.Config,
         retryCount: Int
@@ -107,7 +108,7 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
         reConnectingPolicy handle tmp match {
             case ReConnectingPolicy.Retry(delay) =>
 
-                logger info s"Schedule for Retry Unstablished Connection, ${stringOfRef(tmp)}"
+                logger debug s"Schedule for Retry Unstablished Connection, ${stringOfRef(tmp)}"
 
                 val retryCount = tmp.state match {
                     case _: Connection.State.Trying => tmp.retryCount + 1
@@ -151,23 +152,19 @@ class Director[T <: TrackedFrame, U <: UntrackedFrame[T]](
         case Terminated(ref) if all(ref).state.isInstanceOf[Connection.State.Established] =>
 
             val conn = all(ref)
-            logger info s"Terminated An Established Connection, ${stringOfRef(conn)}"
-
             _established -= 1
-            logger info s"Total Established Connection: ${_established}"
+            logger warn s"Terminated an Established Connection, ${stringOfRef(conn)}, Total Established: ${_established}"
 
             scheduleForRenewing(ref)
 
         case Terminated(ref) if all contains ref =>
             val conn = all(ref)
-            logger info s"Terminated An Unestablished Connection, ${stringOfRef(conn)}"
+            logger debug s"Terminated an Unestablished Connection, ${stringOfRef(conn)}"
             scheduleForRenewing(ref)
 
         case st: Connection.State.Established =>
-            logger info s"New Established Connection, ${stringOfSt(st)}"
-
             _established += 1
-            logger info s"Total Established Connection: ${_established}"
+            logger debug s"New Established Connection, ${stringOfSt(st)}, Total Established: ${_established}"
 
             val tmp = setEstablishedConnection(sender, st)
             proxy ! Proxy.NewConnection(

@@ -4,13 +4,21 @@
         <!-- encoders are assigned the type
              ch.qos.logback.classic.encoder.PatternLayoutEncoder by default -->
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <!-- pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern -->
+            <pattern>%-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
     <logger name="com.datastax.driver.core" level="INFO">
         <appender-ref ref="STDOUT"/>
     </logger>
+
+    <logger name="first.sarf.server" level="OFF" />
+    <logger name="first-server.sarf" level="OFF" />
+    <logger name="second.sarf.server" level="OFF" />
+    <logger name="second-server.sarf" level="OFF" />
+    <logger name="c.b.sarf.implv1.Service" level="OFF" />
+    <logger name="ch.qos.logback" level="OFF" />
 
     <!--logger name="client-first.flow" level="INFO"/>
     <logger name="client-second.flow" level="INFO"/>

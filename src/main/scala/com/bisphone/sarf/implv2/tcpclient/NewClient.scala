@@ -1,21 +1,49 @@
 package com.bisphone.sarf.implv2.tcpclient
 
-import scala.concurrent.{ Await, ExecutionContextExecutor, Future, Promise }
-import scala.reflect.ClassTag
 import akka.actor.{ ActorRef, ActorSystem, PoisonPill }
 import com.bisphone.launcher.Module
+import com.bisphone.sarf.implv2.tcpclient.NewClient.FnState
 import com.bisphone.sarf._
-import com.bisphone.std._
-import akka.pattern.ask
-import com.bisphone.sarf.implv2.tcpclient
-import com.bisphone.util.AsyncResult
+import com.bisphone.std.{ StdLeft, StdRight, Try }
+import com.bisphone.util.{ AsyncResult, ReliabilityState }
 
 import scala.concurrent.duration.FiniteDuration
+import scala.concurrent.{ Await, ExecutionContextExecutor, Future, Promise }
+import scala.reflect.ClassTag
+import akka.pattern.ask
+import com.typesafe.scalalogging.Logger
 
-object TCPClient {
-    def apply [T <: TrackedFrame, U <: UntrackedFrame[T]](
+object NewClient {
+
+    class FnState(
+        val onReadyness: Promise[ActorRef],
+        val onShutdown: Promise[Unit],
+        val logger: Logger
+    ) extends (NewDirector.Interface => Unit) {
+
+        var lastState: ReliabilityState = null;
+
+        override def apply (ref: NewDirector.Interface): Unit = {
+
+            logger.debug(s"FnState.Change, newState: ${ref.state}, lastState: ${lastState}")
+
+            if (lastState == null && !ref.state.isBootstrap) {
+                // first-call
+                onReadyness.trySuccess(ref.proxy)
+            }
+
+            if (ref.state.isShutdown) {
+                // last-call
+                onShutdown.trySuccess()
+            }
+
+            lastState = ref.state
+        }
+    }
+
+    def apply[T <: TrackedFrame, U <: UntrackedFrame[T]](
         name: String,
-        config: Director.Config,
+        config: NewDirector.Config,
         writer: FrameWriter[T, U],
         reader: FrameReader[T],
         actorSystem: ActorSystem,
@@ -24,15 +52,14 @@ object TCPClient {
         implicit
         $tracked: ClassTag[T],
         $untracked: ClassTag[U]
-    ): TCPClient[T, U] = {
-        new TCPClient(name, config, writer, reader, actorSystem, executionContext)
+    ): NewClient[T, U] = {
+        new NewClient(name, config, writer, reader, actorSystem, executionContext)
     }
-
 }
 
-class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]] private (
+class NewClient[T <: TrackedFrame, U <: UntrackedFrame[T]](
     val name: String,
-    config: Director.Config,
+    config: NewDirector.Config,
     writer: FrameWriter[T, U],
     reader: FrameReader[T],
     actorSystem: ActorSystem,
@@ -41,41 +68,26 @@ class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]] private (
     implicit
     $tracked: ClassTag[T],
     $untracked: ClassTag[U]
-) extends com.bisphone.sarf.TCPClientRef[T, U] with Module {
+) extends com.bisphone.sarf.TCPClientRef[T, U] with Module { self =>
 
     protected val logger = loadLogger
 
-    protected val readyness = Promise[ActorRef]()
-    protected val directorName = s"${name}.director"
+    protected val onReadyness = Promise[ActorRef]()
+    protected val onShutdown = Promise[Unit]()
+    protected val directorName = s"${name}.new-director"
+    private val fnState = new FnState(onReadyness, onShutdown, logger)
 
-    protected val directorProps = Director.props(
-        directorName, config, writer, reader, {
-            case StdSuccess(ref) =>
-                readyness success (ref)
-            case StdFailure(cause) =>
-                readyness failure cause
-        }, { _ => },
-        new tcpclient.ReConnectingPolicy.SimpleHandler(s"${name}.reconnecting-policy", config.retryDelay)
-    )
+    protected val directorProps = NewDirector.props(directorName, config, writer, reader, fnState)
+
     protected val director = actorSystem actorOf (directorProps, name)
 
-    protected val proxy = Await.result(readyness.future, config.initTimeout)
+    protected val proxy = Await.result(fnState.onReadyness.future, config.initTimeout)
 
     protected def now = System.currentTimeMillis()
 
     override def isActive() = Future successful true
 
     override def send(rq: U) = {
-
-        // ask(proxy, Proxy.Send(rq, now)).map {
-        /*
-        [error] /home/reza/workspace/SARF/src/main/scala/com/bisphone/sarf/implv2/tcpclient/Proxy.scala:43:32: pattern type is incompatible with expected type;
-        [error]  found   : U
-        [error]  required: com.bisphone.sarf.UntrackedFrame[com.bisphone.sarf.TrackedFrame]
-        [error] Note: T <: com.bisphone.sarf.TrackedFrame (and U <: com.bisphone.sarf.UntrackedFrame[T]), but trait UntrackedFrame is invariant in type Fr.
-        [error] You may wish to define Fr as +Fr instead. (SLS 4.5)
-        [error]         case Proxy.Send(frame: U, time) =>
-         */
 
         ask(proxy, Proxy.Send[U](rq, now))(config.requestTimeout).map {
 
@@ -130,4 +142,8 @@ class TCPClient[T <: TrackedFrame, U <: UntrackedFrame[T]] private (
             timeout
         )
     }
+
+    // private val onShutdown = fnState.onShutdown.future.map { _ => self }
+    def whenShutdown = onShutdown
+
 }
