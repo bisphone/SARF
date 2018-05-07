@@ -21,14 +21,13 @@ object NewClient {
         val logger: Logger
     ) extends (NewDirector.Interface => Unit) {
 
-        var lastState: ReliabilityState = null;
+        var lastState: ReliabilityState = null
 
         override def apply (ref: NewDirector.Interface): Unit = {
 
             logger.debug(s"FnState.Change, newState: ${ref.state}, lastState: ${lastState}")
 
-            if (lastState == null && !ref.state.isBootstrap) {
-                // first-call
+            if (lastState == null && (ref.state.isGreen || ref.state.isYello)) {
                 onReadyness.trySuccess(ref.proxy)
             }
 
@@ -74,14 +73,20 @@ class NewClient[T <: TrackedFrame, U <: UntrackedFrame[T]](
 
     protected val onReadyness = Promise[ActorRef]()
     protected val onShutdown = Promise[Unit]()
+
     protected val directorName = s"${name}.new-director"
+
     private val fnState = new FnState(onReadyness, onShutdown, logger)
 
     protected val directorProps = NewDirector.props(directorName, config, writer, reader, fnState)
 
     protected val director = actorSystem actorOf (directorProps, name)
 
+    logger.debug(s"Init, Waiting for Proxy ...")
+
     protected val proxy = Await.result(fnState.onReadyness.future, config.initTimeout)
+
+    logger.debug(s"Init, Proxy: ${proxy}")
 
     protected def now = System.currentTimeMillis()
 

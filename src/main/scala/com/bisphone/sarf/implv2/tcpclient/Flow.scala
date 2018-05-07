@@ -49,7 +49,9 @@ class Output[T <: TrackedFrame](
 
         private def pump() = {
             if (isAvailable(out) && messages.nonEmpty) {
-                push(out, messages.dequeue.bytes)
+                val pack = messages.dequeue.bytes
+                logger.trace(s"Pump, Bytes: ${pack.size}")
+                push(out, pack)
             }
         }
 
