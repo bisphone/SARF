@@ -45,12 +45,11 @@ class Proxy[T <: TrackedFrame, U <: UntrackedFrame[T]](
     override def receive: Receive = {
 
         case Proxy.HealthCheck(desc) =>
-            logger info s"HealthCheck, Desc: ${desc}, "
+            logger info s"HealthCheck, Desc: ${desc}"
             sender ! unit
 
         case Proxy.Send(frame: U, time) =>
 
-            logger trace s"Here, Sender: ${sender}"
             balancer.pickOne match {
 
                 case Some(conn) =>
@@ -60,7 +59,7 @@ class Proxy[T <: TrackedFrame, U <: UntrackedFrame[T]](
                     logger trace s"Send, TrackingKey: ${ctx.trackingKey}, TypeKey: ${frame.dispatchKey.typeKey}, Caller: ${ctx.caller}, Connection: ${conn}"
 
                 case None =>
-                    logger warn s"NotAvailableConnection!"
+                    logger warn s"No Available Connection !!!"
                     // @todo stash
             }
 
@@ -75,7 +74,7 @@ class Proxy[T <: TrackedFrame, U <: UntrackedFrame[T]](
             }
 
         case Proxy.NewConnection(id, name, desc, ref) =>
-            logger info s"NewConnection, Name: ${name}, Id: ${id}, desc: ${desc}"
+            logger info s"NewConnection, Name: ${name}, Id: ${id}, Desc: ${desc}"
             val conn = ConnectionContext(
                 name ,desc, id, ref,
                 System.currentTimeMillis,
