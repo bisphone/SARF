@@ -125,6 +125,7 @@ class NewDirector[T <: TrackedFrame, U <: UntrackedFrame[T]](
                 state match {
                     case red: Red[_] if red.since + time < now => state // Ignore !
                     case red: Red[_] => red.shutdown(now)
+                    case st => st
                 }
         }
 

@@ -27,7 +27,6 @@ class NewClientSuite extends TestKit(ActorSystem()) with BaseSuite with NewClien
 
         val name = "Reza"
 
-
         implicit val timeout: FiniteDuration = 10 seconds
 
         var firstServer = up(First)
@@ -272,7 +271,7 @@ object NewClientSuite {
                 fail(s"Right : ${value }")
         } catch {
             case NonFatal(cause) =>
-                logger debug s"Failure: ${cause.getMessage }"
+                logger debug s"Failure: ${cause.getMessage}"
                 throw cause
         }
 

@@ -4,11 +4,11 @@ organization := "com.bisphone"
 
 name := "sarf" // Simple Abstraction for Remote Function
 
-version := "0.8.2"
+version := "0.8.3-SNAPSHOT"
 
-scalaVersion := "2.12.5"
+scalaVersion := "2.12.6"
 
-crossScalaVersions := Seq("2.11.11", "2.12.5")
+crossScalaVersions := Seq("2.11.12", "2.12.6"/*, "2.13.0-M4"*/)
 
 scalacOptions ++= Seq("-feature", "-deprecation", "-language:postfixOps")
 
@@ -28,7 +28,7 @@ libraryDependencies ++= Seq(
 )
 
 libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "3.0.1" % Test,
+    "org.scalatest" %% "scalatest" % "3.0.5" % Test,
     "com.bisphone" %% "testkit" % "0.4.1" % Test,
     akka("akka-testkit") % Test,
     akka("akka-stream-testkit") % Test
