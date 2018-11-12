@@ -24,7 +24,7 @@ private[implv1] class SocketManager (
     requestFlow: Flow[ByteString, ByteString, ActorRef]
 ) extends Actor {
 
-   val loggerName = s"SARFServer(${name}).SockerManger"
+   val loggerName = s"${name}.sarf.server.socket-manager"
    val logger = LoggerFactory getLogger loggerName
 
    implicit val system = context.system
@@ -40,22 +40,11 @@ private[implv1] class SocketManager (
          context become bound(st)
          context.parent ! Director.State.Bound(st)
 
-         if (logger.isInfoEnabled()) logger info
-            s"""{
-                |"subject":         "${loggerName}.Binding => Bound",
-                |"host":            "${config.host}:${config.port}",
-                |"backlog":         ${config.backlog}
-                |}""".stripMargin
+         if (logger.isInfoEnabled()) logger info s"Binding, Bound, ${config}"
 
       case Left(cause: Throwable) =>
 
-         if (logger.isErrorEnabled()) logger error(
-            s"""{
-                |"subject":      "${loggerName}.BindingFailure => throw SocketBindingFailure",
-                |"host":         "${config.host}:${config.port}",
-                |"backlog":      ${config.backlog},
-                |"error":        "${cause.getMessage}"
-                |}""".stripMargin, cause)
+         if (logger.isErrorEnabled()) logger error (s"Binding, Failed, ${config}", cause)
 
          throw new Director.Exception.SocketBindFailure("Failure in binding", cause)
 
@@ -63,47 +52,23 @@ private[implv1] class SocketManager (
          unbindRequestors += requestor
          context become unbindOnBound
 
-         if (logger.isDebugEnabled()) logger debug
-            s"""{
-              |"subject":     "${loggerName}.Binding => UnbindByDemand",
-              |"desc":        "Try to unbind not-bound socket"
-              |}""".stripMargin
+         if (logger.isDebugEnabled()) logger debug s"Binding, UnbindByDemand!"
    }
 
    def unbindOnBound: Receive = {
       case Right(st: Tcp.ServerBinding) =>
-
          bindingSt = st
-
-         if (logger.isDebugEnabled()) logger debug
-            s"""{
-              |"subject":     "${loggerName}."
-              |'subject': 'Socket.*',
-              |'desc': 'Try to unbind newly bound socket'
-              |}""".stripMargin
-
+         if (logger.isDebugEnabled()) logger debug s"UnbindOnBound, Unbound, ${config}"
          unbound(st)
 
       case Left(cause: Throwable) =>
-
-         if (logger.isWarnEnabled()) logger warn(
-            s"""{
-                |"subject":     "${loggerName}.UnbindFailure => Stop",
-                |"host":        "${config.host}:${config.port}",
-                |"backlog":     ${config.backlog},
-                |"errorType":   "${cause.getClass.getName}",
-                |"errorMsg":    "${cause.getMessage}",
-                |"desc":         "UnbindOnBound"
-                |}""".stripMargin, cause)
-
-           context stop self
+         if (logger.isErrorEnabled()) logger error (s"UnbindOnBound, Failure, ${config}", cause)
+         context stop self
    }
 
    def bound (st: Tcp.ServerBinding): Receive = {
       case Director.Command.UnbindByDemand(requestor) =>
-
-         if (logger.isDebugEnabled()) logger debug s"""{"subject":  "${loggerName}.Bound => Unbind"}"""
-
+         if (logger.isInfoEnabled()) logger info s"Bound, UnboundByDemand, ${config}, Sender: ${sender()}"
          unbindRequestors += requestor
          unbound(st)
    }
@@ -111,14 +76,8 @@ private[implv1] class SocketManager (
    def unbinding: Receive = {
       case Director.State.Unbound =>
 
-         if (logger.isInfoEnabled()) logger info
-            s"""{
-                |"subject":         "${loggerName}.Unbound => Stop",
-                |"host":            "${config.host}:${config.port}"
-                |}""".stripMargin
-
+         if (logger.isInfoEnabled()) logger info s"Unbinding, Unbound, ${config}"
          context.parent ! Director.Event.UnboundByDemand(unbindRequestors.toList)
-
          context stop self
    }
 
@@ -139,7 +98,7 @@ private[implv1] class SocketManager (
             val connectionDirector = (conn handleWith requestFlow)
             connectionManager ! Director.Event.NewConnection(conn, connectionDirector)
          } catch {
-            case cause: Throwable => logger error("Error on materializing income-connection", cause)
+            case cause: Throwable => logger error("TCP-Flow, Failure on materializing income-connection", cause)
          }
       } to Sink.ignore
 
@@ -149,13 +108,13 @@ private[implv1] class SocketManager (
       }.recover {
          case cause => Left(cause)
       }.foreach(st => self ! st)
-      if (logger.isDebugEnabled()) logger debug s"""{"subject": "${loggerName}.preStart"}"""
+      if (logger.isDebugEnabled()) logger info "PreStart"
    } // Async !
 
    override def postStop (): Unit = synchronized {
 
       Await.ready(bindingSt.unbind(), 3 seconds)
-      if (logger.isDebugEnabled()) logger debug s"""{"subject": "${loggerName}.postStop"}"""
+      if (logger.isDebugEnabled()) logger info "PostStop"
    }
 
 }

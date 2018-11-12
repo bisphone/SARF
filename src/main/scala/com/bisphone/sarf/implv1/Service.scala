@@ -46,7 +46,7 @@ object Service {
          }(ec)
       }
 
-      override def toString = s"Fn(${rqKey.typeKey}/${rsKey.typeKey}/${erKey.typeKey})"
+      override def toString = s"Fn(Rq:${rqKey.typeKey}, Rs:${rsKey.typeKey}, Er:${erKey.typeKey})"
    }
 
    class Builder[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
@@ -75,8 +75,19 @@ object Service {
          erWriter: Writer[Er, Fr, UFr],
          statTag: StatTag[Rq]
       ): Builder[Fr, UFr] = {
+
+
+
          val tmp = Fn[Rq, Rs, Er, Fr, UFr](fn, rqKey, rsKey, erKey, rqReader, rsWriter, erWriter, statTag)
-         val similarFn = fnlist.find( i => tmp.rqKey.typeKey == rqKey.typeKey)
+
+
+          if (logger.isTraceEnabled()) {
+              val stack = new Exception("")
+              stack.fillInStackTrace()
+              logger.trace(s"Add, $tmp", stack)
+          }
+
+         val similarFn = fnlist.find( i => tmp.rqKey.typeKey == i.rqKey.typeKey)
          if (similarFn.isDefined) {
             logger.error(s"Similar Functions: ${similarFn.get} / ${tmp}")
             throw new RuntimeException(s"Similar Function: ${tmp} vs. ${similarFn.get}")
@@ -146,6 +157,7 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
    uf$tag: ClassTag[UFr]
 ) extends sarf.Service[Fr, UFr] {
 
+   private val logger = LoggerFactory getLogger classOf[Service[Fr, UFr]]
 
    protected def get (key: TypeKey[_]): Option[Service.Fn[_, _, _, Fr, UFr]] =
       handlers.get(key.typeKey).asInstanceOf[Option[Service.Fn[_, _, _, Fr, UFr]]]
@@ -180,17 +192,21 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
    protected def unsupported (frame: Fr) = {
       failureHandler(new UnsupporetdDispatchKey[Fr](
          frame,
-         s"Unsupported Dispatch Key: ${frame.dispatchKey} (by TrackingKey: ${frame.trackingKey})"
+         s"Unsupported TypeKey: ${frame.dispatchKey.typeKey} (by TrackingKey: ${frame.trackingKey})"
       ), frame.bytes)
    }
 
    def handle (bytes: ByteString): Future[IOCommand] = try {
 
 
+      if (logger.isTraceEnabled()) logger trace s"Handle, Bytes: ${bytes.size}"
+
       val frame = frameReader.readFrame(bytes)
+
       get(frame.dispatchKey) match {
          case Some(fn) =>
 
+            if (logger.isTraceEnabled()) logger trace s"Handle, TypeKey: ${frame.dispatchKey}, Function: ${fn}"
             if (statCollector.isDefined) {
                runWithStat(fn, frame, System.currentTimeMillis(), statCollector.get)
             } else run(fn, frame).recoverWith {
@@ -198,11 +214,13 @@ class Service[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] private(
             }(executor)
 
          case None =>
+            if (logger.isWarnEnabled()) logger warn s"Handle, Unsupported, TypeKey: ${frame.dispatchKey}"
             unsupported(frame)
       }
 
    } catch {
       case NonFatal(cause) =>
+         if (logger.isErrorEnabled()) logger error ("Handle, Failure", cause)
          // @todo: Collect Stats
          failureHandler(cause, bytes)
    }

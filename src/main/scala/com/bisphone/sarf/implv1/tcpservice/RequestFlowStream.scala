@@ -1,15 +1,15 @@
 package com.bisphone.sarf.implv1.tcpservice
 
-import akka.actor.{ActorRef, Props}
+import akka.actor.{ ActorRef, Props }
 import akka.stream.FlowShape
-import akka.stream.scaladsl.{Flow, GraphDSL, Merge, Source}
+import akka.stream.scaladsl.{ Flow, GraphDSL, Merge, Source }
 import akka.stream.stage.GraphStage
 import akka.util.ByteString
 import com.bisphone.akkastream.ByteStreamSlicer
-import com.bisphone.sarf.{Constant, IOCommand}
+import com.bisphone.sarf.{ Constant, IOCommand }
 import com.bisphone.sarf.implv1.util.StreamConfig
 import com.bisphone.util.ByteOrder
-import org.slf4j.Logger
+import org.slf4j.{ Logger, LoggerFactory }
 
 import scala.concurrent.Future
 
@@ -26,20 +26,24 @@ private[implv1] object RequestFlowStream {
       ByteStreamSlicer(name, Constant.lenOfLenField, maxSize, byteOrder)
 
    def apply (
-      name: String,
-      conf: StreamConfig,
-      connectionAgent: Props,
-      logger: Logger,
-      debug: Boolean
+      name : String,
+      conf : StreamConfig,
+      connectionAgent : Props,
+      @deprecated injectedLogger : Logger,
+      @deprecated debug : Boolean
    )(
       fn: ByteString => Future[IOCommand]
    ): Flow[ByteString, ByteString, ActorRef] = {
+
+      val loggerName = s"${name}.sarf.server.request-flow-stream"
+      val logger = LoggerFactory getLogger loggerName
+      injectedLogger warn s"SEE '${loggerName}'"
 
       val maxSliceSize = conf.maxSliceSize
       val byteOrder = conf.byteOrder
       val concurrencyPerConnection = conf.concurrencyPerConnection
 
-      val sureDebug = debug && logger.isDebugEnabled()
+      val sureDebug = injectedLogger.isDebugEnabled()
 
       def logBytes (subject: String): ByteString => ByteString = bytes => {
          val arr = bytes.toArray
@@ -54,11 +58,7 @@ private[implv1] object RequestFlowStream {
             buf.toString()
          } else if (arr.size == 1) (iter.next() & 0xFF).toString else ""
 
-         logger debug
-            s"""{
-                |"subject":      "${subject}",
-                |"bytes":        [${str}]
-                |}""".stripMargin
+         injectedLogger trace s"${subject}, Bytes(${bytes.size}): ${str}"
 
          bytes
       }
@@ -74,8 +74,8 @@ private[implv1] object RequestFlowStream {
          source ~> mergeStage
 
          val slicerStage: FlowShape[ByteString, ByteString] = {
-            val a = Flow[ByteString] via slicer(s"SARFServer(${name}).Slicer", byteOrder, maxSliceSize)
-            val b = if (sureDebug) a map logBytes(s"SARFServer(${name}).ByteInputStream") else a
+            val a = Flow[ByteString] via slicer(s"${name}", byteOrder, maxSliceSize)
+            val b = if (sureDebug) a map logBytes(s"${name}.sarf.server.ByteInputStream") else a
             builder add b
          }
 
@@ -84,9 +84,9 @@ private[implv1] object RequestFlowStream {
             .mapAsync(concurrencyPerConnection)(fn) ~> mergeStage
 
          // IOCommandTransformer will add len-field when it's needed
-         val merged = mergeStage.out.via(new IOCommandTransformer(name, conf.byteOrder, debug, logger))
+         val merged = mergeStage.out.via(new IOCommandTransformer(name, conf.byteOrder, debug, injectedLogger))
 
-         val result = if (sureDebug) merged map logBytes(s"SARFServer(${name}).ByteOutputStream") else merged
+         val result = if (sureDebug) merged map logBytes(s"${name}.sarf.server.ByteOutputStream") else merged
 
          FlowShape(slicerStage.in, result.outlet)
       }

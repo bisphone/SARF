@@ -12,32 +12,19 @@ import scala.collection.mutable
   */
 class Writer (name: String, director: ActorRef) extends ActorPublisher[ByteString] {
 
-    val loggerName = s"SARFClient(${name}).Writer"
+    val loggerName = s"${name}.sarf.client.writer"
     val logger = LoggerFactory getLogger loggerName
 
     import ActorPublisherMessage._
 
     override def preStart (): Unit = {
-
         context watch director
-
-        if (logger isDebugEnabled()) logger debug
-            s"""{
-               |"subject":      "${loggerName}.preStart",
-               |"actor":        "${self}",
-               |"director":     "${director}"
-               |}""".stripMargin
+        if (logger.isInfoEnabled) logger info s"PreStart, Self: ${self}, Director: ${director}"
     }
 
     override def postStop (): Unit = {
-
-        if (logger isDebugEnabled()) logger debug
-            s"""{
-               |"subject":      "${loggerName}.postStop",
-               |"actor":        "${self}",
-               |"director":     "${director}"
-               |}""".stripMargin
-
+        try context unwatch director finally ();
+        if (logger isInfoEnabled ()) logger info s"PostStop, Self: ${self}, Director: ${director}"
     }
 
     val queue = mutable.Queue.empty[ByteString]
@@ -52,28 +39,19 @@ class Writer (name: String, director: ActorRef) extends ActorPublisher[ByteStrin
     }
 
     def receive: Receive = {
-        case request: ByteString => send(request)
+        case request: ByteString =>
+            if (logger.isTraceEnabled()) logger trace s"Send, Bytes:${request.size}"
+            send(request)
+
         case Request(n) => deliver()
+            if (logger.isTraceEnabled()) logger trace s"Request, Demands: ${n}"
+
         case Cancel =>
-
-            if (logger isWarnEnabled()) logger warn
-                s"""{
-                   |"subject":      "${loggerName}.StreamHasCanceled => Stop",
-                   |"actor":        "${self}",
-                   |"director":     "${director}"
-                   |}""".stripMargin
-
+            if (logger.isInfoEnabled) logger info s"Cancel, Self: ${self}"
             context stop self
 
         case Terminated(ref /* director */) =>
-
-            if (logger isWarnEnabled()) logger warn
-                s"""{
-                   |"subject":      "${loggerName}.DirectorHasTerminated => Stop",
-                   |"actor":        "${self}",
-                   |"director":     "${director}"
-                   |}""".stripMargin
-
+            if (logger.isWarnEnabled) logger warn s"Terminated, Origin: ${ref}, Self: ${self}"
             context stop self
     }
 

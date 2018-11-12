@@ -1,13 +1,13 @@
 import akka.actor.ActorSystem
 import akka.util.ByteString
-import com.bisphone.sarf.implv1.{Service, TCPClient, TCPServer}
-import com.bisphone.sarf.{FailureHandler, Func, IOCommand}
-import com.bisphone.sarf.implv1.util.{StreamConfig, TCPConfigForClient, TCPConfigForServer}
+import com.bisphone.sarf.implv1.{ Service, TCPClient, TCPServer }
+import com.bisphone.sarf.{ FailureHandler, Func, IOCommand }
+import com.bisphone.sarf.implv1.util.{ StreamConfig, TCPConfigForClient, TCPConfigForServer }
 import com.bisphone.std._
-import com.bisphone.testkit._
 import com.bisphone.util.AsyncResult
+import util.BaseSuite
 
-import scala.concurrent.{Await, ExecutionContext, Future}
+import scala.concurrent.{ Await, ExecutionContext, Future }
 import scala.concurrent.duration._
 import scala.util.control.NonFatal
 

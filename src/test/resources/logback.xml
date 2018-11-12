@@ -4,7 +4,8 @@
         <!-- encoders are assigned the type
              ch.qos.logback.classic.encoder.PatternLayoutEncoder by default -->
         <encoder>
-            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+            <!-- pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern -->
+            <pattern>%-5level %logger{36} - %msg%n</pattern>
         </encoder>
     </appender>
 
@@ -12,7 +13,21 @@
         <appender-ref ref="STDOUT"/>
     </logger>
 
-    <root level="WARN">
+    <logger name="first.sarf.server" level="OFF" />
+    <logger name="first-server.sarf" level="OFF" />
+    <logger name="second.sarf.server" level="OFF" />
+    <logger name="second-server.sarf" level="OFF" />
+    <logger name="c.b.sarf.implv1.Service" level="OFF" />
+    <logger name="ch.qos.logback" level="OFF" />
+
+    <!--logger name="client-first.flow" level="INFO"/>
+    <logger name="client-second.flow" level="INFO"/>
+    <logger name="first-server.sarf.server" level="INFO" />
+    <logger name="second-server.sarf.server" level="INFO" />
+    <logger name="com.bisphone.sarf.implv1.Service" level="INFO" /-->
+    <!--logger name="client.proxy" level="TRACE"/-->
+
+    <root level="INFO">
         <appender-ref ref="STDOUT"/>
     </root>
 

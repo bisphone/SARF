@@ -22,7 +22,7 @@ private[implv1] class Director (
    onRequest: ByteString => Future[IOCommand]
 ) extends Actor {
 
-   val loggerName = s"SARFServer(${name}).Director"
+   val loggerName = s"${name}.sarf.server.director"
    val logger = LoggerFactory getLogger loggerName
 
    var st: Director.State = Director.State.Binding
@@ -36,6 +36,8 @@ private[implv1] class Director (
    }
 
    override def preStart (): Unit = {
+
+      if (logger.isTraceEnabled()) logger trace s"PreStart, ..."
 
       val flow =
          RequestFlowStream(
@@ -58,17 +60,19 @@ private[implv1] class Director (
 
       context become initialized(connectionManager, socketManager)
 
-      if (logger isWarnEnabled()) logger warn
-          s"""{
-             |"subject":      "${loggerName}.preStart",
-             |"actor":        "${self}"
-             |}""".stripMargin
+      if (logger.isInfoEnabled) logger info s"PreStart, Name: ${name}, TCP: ${tcp}, Stream: ${stream}"
+      if (logger.isDebugEnabled) logger debug s"PreStart, Name: ${name}, TCP: ${tcp}, Stream: ${stream}, ConnectionManager: ${connectionManager}, SocketManager: ${socketManager}"
    }
 
-   override def postStop (): Unit = stop
+   override def postStop (): Unit = {
+      stop
+      if (logger.isInfoEnabled()) logger info "PostStop"
+   }
 
    val initializing: Receive = {
-      case Director.Command.GetState => sender ! st
+      case Director.Command.GetState =>
+         if (logger.isTraceEnabled()) logger trace s"Initializing, GetState, Sender: ${sender()}"
+         sender ! st
    }
 
    def initialized (
@@ -76,14 +80,20 @@ private[implv1] class Director (
       socketManger: ActorRef
    ): Receive = {
 
-      case Director.Command.GetState => sender ! st
+      case Director.Command.GetState =>
+         if (logger.isTraceEnabled()) logger trace s"Initialized, GetState, Sender: ${sender()}"
+         sender ! st
 
-      case st: Director.State => updateSt(st)
+      case st: Director.State =>
+         if (logger.isDebugEnabled()) logger debug s"Initialized, UpdateState"
+         updateSt(st)
 
       case Director.Command.Unbind =>
+         if (logger.isInfoEnabled()) logger info s"Initialized, Unbind"
          socketManger ! Director.Command.UnbindByDemand(sender)
 
       case Director.Event.UnboundByDemand(requestors) =>
+         if (logger.isDebugEnabled()) logger info s"Initialized, UnboundByDemand!"
          requestors.foreach {
             _ ! Director.State.Unbound
          }
@@ -95,18 +105,10 @@ private[implv1] class Director (
    def updateSt (st: Director.State): Unit = {
       val old = this.st
       this.st = st
-      if (logger.isInfoEnabled()) logger info
-         s"""{
-             |"subject":      "${loggerName}.ChangeState",
-             |"oldState":     "${old}",
-             |"newState":     "${st}"
-             |}""".stripMargin
+      if (logger.isInfoEnabled()) logger info s"ChangeState, Old: ${old}, New: ${st}"
    }
 
-   def stop = {
-      if (logger isWarnEnabled ()) logger warn s"""{"subject": "${loggerName}.postStop"}"""
-      try context stop self finally ();
-   }
+   def stop = try context stop self finally ();
 
 }
 

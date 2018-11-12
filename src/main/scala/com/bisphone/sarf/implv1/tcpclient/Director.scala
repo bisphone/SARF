@@ -141,7 +141,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
     implicit val mat = ActorMaterializer()(context.system)
 
-    val loggerName = s"SARFClient(${name}).Director"
+    val loggerName = s"${name}.sarf.client.director"
     val logger = LoggerFactory getLogger loggerName
 
     val debug = logger.isDebugEnabled()
@@ -153,7 +153,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
     val disconnectRequesters = scala.collection.mutable.ListBuffer.empty[ActorRef]
 
     def changeContext(name: String, ctx: Receive) = {
-        println(s"Change Context (${name})")
+        if (logger.isDebugEnabled()) logger debug s"Contxt Change: ${name}"
         context become ctx
     }
 
@@ -161,30 +161,23 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
         state = State.Connecting
 
         {
-        case Command.GetState => sender ! state
+        case Command.GetState =>
+            if (logger.isDebugEnabled) logger debug s"Conneting, GetState!, Sender: ${sender}"
+            sender ! state
 
 
         // case frm: Command.Send[_] =>
         // logger warn """{'subject': 'Director(connecting).Send => Can\'tSend'}"""
         case Command.Send(rq: UFr) if uf$tag.unapply(rq).isDefined /* check type erasaure */ =>
 
-            if (logger isWarnEnabled) logger warn
-                s"""{
-                   |"subject":               "${loggerName}.Connecting.Send => Can't Send",
-                   |"untrackedDispatchKey":  ${rq.dispatchKey}
-                   |}""".stripMargin
+            if (logger.isWarnEnabled) logger warn s"Connecting, Send, Sender: ${sender}, TypeKey: ${rq.dispatchKey}"
 
             sender ! Director.Event.CantSend
 
         case ev: Event.Connected =>
 
-            if (logger isWarnEnabled()) logger warn
-                s"""{
-                   |"subject":      "${loggerName}.Connecting => Connected",
-                   |"publisher":    "${ev.publisher}",
-                   |"consumer":     "${ev.consumer}",
-                   |"connection":   "${ev.conn}"
-                   |}""".stripMargin
+            if (logger.isInfoEnabled) logger info s"Connecting, Established"
+            if (logger.isDebugEnabled()) logger debug s"Connecting, Established, Publisher: ${ev.publisher}, Consumer: ${ev.consumer}, ${ev.conn}"
 
             context watch ev.publisher
             context watch ev.consumer
@@ -192,36 +185,24 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
         case Event.Expired(_) =>
 
-            if (logger isWarnEnabled()) logger warn
-                s"""{
-                   |"subject":      "${loggerName}.Connecting.Expired => Stop",
-                   |"tcpConfig":    "$tcp"
-                   |}""".stripMargin
+            if (logger.isErrorEnabled) logger error s"Connecting, Expired, Stoping!"
 
             context stop self
 
         case Event.Failed(cause) =>
             cause.foreach(_.printStackTrace())
-
-
-            if (logger isErrorEnabled()) logger error(
-                s"""{
-                   |"subject":      "${loggerName}.Connecting.Failed => Stop",
-                   |"tcpConfig":    "$tcp"
-                   |}""".stripMargin, cause.orNull
-            )
+            if (logger.isErrorEnabled) logger error (s"Connecting, Failure, TCP Config: ${tcp}", cause)
 
             context stop self
-
-        // Unused! and Depricated!
-        case Echo(value) => sender ! value
     }}
 
     def connected (ev: Event.Connected): Receive = {
         state = State.Connected
 
         {
-            case Command.GetState => sender ! state
+            case Command.GetState =>
+                if (logger.isDebugEnabled) logger debug s"Connected, GetState!, Sender: ${sender}"
+                sender ! state
 
             case Command.Send(rq: UFr) if uf$tag.unapply(rq).isDefined /* check type erasaure */ =>
 
@@ -230,13 +211,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
                 ev.publisher ! frame.bytes
 
-                if (logger.isDebugEnabled()) logger debug
-                    s"""{
-                       |"subject":      "${loggerName}.Connected.Send => Sending",
-                       |"dispatchKey":  ${frame.dispatchKey},
-                       |"trackingCode": $tk,
-                       |"bytes":        "${frame.bytes.size}"
-                       |}""".stripMargin
+                if (logger.isDebugEnabled()) logger debug s"Connected, Send, TypeKey: ${frame.dispatchKey}, TrackingKey: ${tk}, Bytes: ${frame.bytes.size}"
 
             case Event.Received(bytes: ByteString) =>
 
@@ -245,32 +220,19 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
                 tracker.resolve(frame.trackingKey) match {
                     case Some(requestor) =>
 
-                        if (logger.isDebugEnabled()) logger debug
-                            s"""{
-                               |"subject":         "${loggerName}.Connected.Received => Deliver",
-                               |"responseKey":     ${frame.dispatchKey},
-                               |"trackingCode":    ${frame.trackingKey},
-                               |"bytes":           ${frame.bytes.size}
-                               |}""".stripMargin
+                        if (logger.isDebugEnabled) logger debug s"Connected, Received, TypeKey: ${frame.dispatchKey}, TrackingKey: ${frame.trackingKey}, Bytes: ${frame.bytes.size}"
 
                         requestor ! Event.Received[Fr](frame)
 
                     case None =>
-
-                        if (logger.isErrorEnabled()) logger error
-                            s"""{
-                               |"subject":      "${loggerName}.Connected.Received => throw UnrequestedResponse!",
-                               |"responseKey":  ${frame.dispatchKey},
-                               |"trackingCode": ${frame.trackingKey},
-                               |"bytes":        ${frame.bytes.size}
-                               |}""".stripMargin
-
-                        throw new Director.UnrequestedResponse[Fr](frame, s"Unrequested Response trackingKey: ${frame.trackingKey}")
+                        if (logger.isErrorEnabled()) logger error s"Connected, Received, Undefined TrackingKey : ${frame.trackingKey}, TypeKey: ${frame.dispatchKey}, Bytes: ${frame.bytes.size}"
+                        // Why?
+                        // throw new Director.UnrequestedResponse[Fr](frame, s"Unrequested Response trackingKey: ${frame.trackingKey}")
                 }
 
             case Command.Disconnect =>
 
-                if (logger isInfoEnabled()) logger info s"""{"subject": "${loggerName}.Connected.Disconnect"}"""
+                if (logger.isWarnEnabled()) logger warn s"Connected, Disconnecting, Sender: ${sender()}"
 
                 ev.publisher ! PoisonPill
 
@@ -280,17 +242,12 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
             case Terminated(ref) =>
 
-                if (logger isWarnEnabled()) logger warn
-                    s"""{
-                       |"subject":      "${loggerName}.Connected.TerminatedWorker => IOException",
-                       |"actor":        "${self},
-                       |"worker":       "${ref}"
-                       |}""".stripMargin
+                if (logger.isErrorEnabled()) logger error s"Connected, Terminated, Origin: ${ref}, Self: ${self}"
 
                 throw new Director.IOException(s"the ${ref} has been terminated!")
 
             case Echo(value) => sender ! value
-                println(s"Director(Connected: ${ev}).Echo")
+                if (logger.isDebugEnabled()) logger debug s"Connected, Echo, Content: ${value}, Sender: ${sender}"
         }
     }
 
@@ -301,18 +258,13 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
             case Command.Disconnect =>
 
-                if (logger.isDebugEnabled()) logger debug s"""{"subject": "${loggerName}.Disconnecting.Disconnect => Nothing"}"""
+                if (logger.isDebugEnabled()) s"Disconnecting, GetState!, Sender: ${sender()}"
 
                 disconnectRequesters += sender()
 
             case Terminated(ref) =>
 
-                if (logger isWarnEnabled()) logger warn
-                    s"""{
-                       |"subject":   "${loggerName}.Disconnecting.TerminateWorder => Stop",
-                       |"actor":     "${self}",
-                       |"worker":    "${ref}"
-                       |}""".stripMargin
+                if (logger.isWarnEnabled()) logger warn s"Disconnecting, Terminated, Origin: ${ref}, Self: ${self}"
 
                 disconnectRequesters.foreach {
                     _ ! unit
@@ -322,7 +274,7 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
             case Event.Expired(_) =>
 
-                if (logger isWarnEnabled()) logger warn s"""{"subject": "${loggerName}.Disconnecting.Expired => Stop"}"""
+                if (logger.isWarnEnabled()) logger warn s"Disconnecting, Expired!"
 
                 disconnectRequesters.foreach {
                     _ ! unit
@@ -336,18 +288,12 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
 
     override def preStart (): Unit = {
 
-        println(s"Director(${state}).preStart")
-
-        if (logger isWarnEnabled()) logger warn
-            s"""{
-               |"subject":      "${loggerName}.preStart",
-               |"actor":        "${self}",
-               |"state":        "${state}",
-               |"tracker":      "${tracker}",
-               |}""".stripMargin
+        if (logger.isInfoEnabled()) logger info s"PreStart, Self: ${self}, State: ${state}, Tracker: ${tracker}"
 
         val publisher: Props = Writer.props(name, self)
         val consumer: Props = Reader.props(name, self)
+
+        if (logger.isDebugEnabled()) logger debug s"PreStart, Publisher: ${publisher}, Consumer: ${consumer}"
 
         val flow: Flow[ByteString, ByteString, (ActorRef, ActorRef)] =
             ClientFlow(
@@ -359,31 +305,29 @@ private[implv1] class Director[Fr <: TrackedFrame, UFr <: UntrackedFrame[Fr]] (
                 debug
             )
 
+        if (logger.isDebugEnabled()) logger debug s"PreStart, TCP Config: ${tcp}, Trying"
+
         Tcp()(context.system).outgoingConnection(tcp.host, tcp.port)
             .joinMat(flow) {
-                case (outgoing, (consumer, publisher)) => outgoing.map(Event.Connected(_, publisher, consumer))
+                case (outgoing, (consumer, publisher)) => outgoing.map { i =>
+                    if (logger.isDebugEnabled) logger debug s"PreStart, TCP Config: ${tcp}, Connected, Publisher: ${publisher}, Consumer: ${consumer}"
+                    Event.Connected(i, publisher, consumer)
+                }
             }.run.recover {
-            case cause => Event.Failed(Some(cause))
-        }.foreach { st => self ! st }
+                case cause =>
+                    if (logger.isErrorEnabled()) logger error (s"PreStart, TCP Config: ${tcp}, Failed", cause)
+                    Event.Failed(Some(cause))
+            }.foreach { st => self ! st }
 
+        if (logger.isDebugEnabled()) logger debug s"PreStart, Schedule Timeout: ${tcp.connectingTimeout}"
         context.system.scheduler.scheduleOnce(tcp.connectingTimeout, self, Event.Expired("Connecting"))
     }
 
     override def postStop (): Unit = try {
-
-        println(s"Director(${state}).postStop")
-
-        if (logger isWarnEnabled()) logger warn
-            s"""{
-               |"subject":      "${loggerName}.postStop",
-               |"actor":        "${self}",
-               |"state":        "${state}",
-               |"tracker":      "${tracker}",
-               |}""".stripMargin
-
+        if (logger.isInfoEnabled) logger info s"PostStop, Self: ${self}, State: ${state}, Tracker: ${tracker}"
     } catch {
         case cause: Throwable =>
-            logger.error(s"Exception on ${loggerName}.postStop", cause)
+            logger error (s"PostStop, Failure", cause)
     }
 
 }
